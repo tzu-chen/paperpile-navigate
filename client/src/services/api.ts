@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup } from '../types';
 
 const BASE = '/api';
 
@@ -15,7 +15,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 // ArXiv
-export async function getCategories(): Promise<Record<string, string>> {
+export async function getCategories(): Promise<CategoryGroup[]> {
   return request('/arxiv/categories');
 }
 

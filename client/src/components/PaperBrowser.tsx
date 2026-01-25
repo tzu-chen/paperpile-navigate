@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArxivPaper } from '../types';
+import { ArxivPaper, CategoryGroup } from '../types';
 import * as api from '../services/api';
 
 interface Props {
@@ -15,7 +15,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds }: Props) {
-  const [categories, setCategories] = useState<Record<string, string>>({});
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('cs.AI');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('submittedDate');
@@ -29,7 +29,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds }
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    api.getCategories().then(setCategories).catch(console.error);
+    api.getCategories().then(setCategoryGroups).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -90,10 +90,14 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds }
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
             >
-              {Object.entries(categories).map(([key, name]) => (
-                <option key={key} value={key}>
-                  {key} - {name}
-                </option>
+              {categoryGroups.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {Object.entries(group.categories).map(([key, name]) => (
+                    <option key={key} value={key}>
+                      {key} - {name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
