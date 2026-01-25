@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { searchArxiv, getArxivPaper } from '../services/arxiv';
-import { ARXIV_CATEGORIES } from '../types';
+import { ARXIV_CATEGORY_GROUPS } from '../types';
 
 const router = Router();
 
-// GET /api/arxiv/categories - List available categories
+// GET /api/arxiv/categories - List available category groups
 router.get('/categories', (_req: Request, res: Response) => {
-  res.json(ARXIV_CATEGORIES);
+  res.json(ARXIV_CATEGORY_GROUPS);
 });
 
 // GET /api/arxiv/search - Search arxiv papers

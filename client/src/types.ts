@@ -44,4 +44,9 @@ export interface Tag {
   color: string;
 }
 
+export interface CategoryGroup {
+  label: string;
+  categories: Record<string, string>;
+}
+
 export type ViewMode = 'browse' | 'library' | 'viewer';
