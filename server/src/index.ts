@@ -1,0 +1,38 @@
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { initializeDatabase } from './services/database';
+import arxivRoutes from './routes/arxiv';
+import papersRoutes from './routes/papers';
+import tagsRoutes from './routes/tags';
+import exportRoutes from './routes/export';
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// API Routes
+app.use('/api/arxiv', arxivRoutes);
+app.use('/api/papers', papersRoutes);
+app.use('/api/tags', tagsRoutes);
+app.use('/api/export', exportRoutes);
+
+// Serve static frontend in production
+const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'dist');
+app.use(express.static(clientBuildPath));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
+});
+
+// Initialize database and start server
+initializeDatabase();
+console.log('Database initialized');
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+
+export default app;

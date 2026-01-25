@@ -1,0 +1,184 @@
+import { useState, useEffect, useCallback } from 'react';
+import { SavedPaper, Comment, Tag } from '../types';
+import * as api from '../services/api';
+import PDFViewer from './PDFViewer';
+import CommentPanel from './CommentPanel';
+import TagPanel from './TagPanel';
+import ExportPanel from './ExportPanel';
+
+interface Props {
+  paper: SavedPaper;
+  allTags: Tag[];
+  onTagsChanged: () => Promise<void>;
+  showNotification: (msg: string) => void;
+}
+
+type SidePanel = 'comments' | 'tags' | 'export' | 'info';
+
+export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification }: Props) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [paperTags, setPaperTags] = useState<Tag[]>([]);
+  const [activePanel, setActivePanel] = useState<SidePanel>('comments');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const authors = JSON.parse(paper.authors) as string[];
+  const categories = JSON.parse(paper.categories) as string[];
+
+  const loadComments = useCallback(async () => {
+    try {
+      const data = await api.getComments(paper.id);
+      setComments(data);
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    }
+  }, [paper.id]);
+
+  const loadPaperTags = useCallback(async () => {
+    try {
+      const data = await api.getPaperTags(paper.id);
+      setPaperTags(data);
+    } catch (err) {
+      console.error('Failed to load tags:', err);
+    }
+  }, [paper.id]);
+
+  useEffect(() => {
+    loadComments();
+    loadPaperTags();
+  }, [loadComments, loadPaperTags]);
+
+  return (
+    <div className="paper-viewer">
+      <div className="viewer-header">
+        <div className="viewer-title-row">
+          <h2>{paper.title}</h2>
+          <a
+            href={paper.abs_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary btn-sm"
+          >
+            ArXiv Page
+          </a>
+        </div>
+        <div className="viewer-meta">
+          <span>{authors.join(', ')}</span>
+          <span>{new Date(paper.published).toLocaleDateString()}</span>
+          {categories.map(c => (
+            <span key={c} className="category-badge">{c}</span>
+          ))}
+          {paperTags.map(t => (
+            <span key={t.id} className="tag-badge" style={{ backgroundColor: t.color }}>
+              {t.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="viewer-body">
+        <div className="viewer-pdf">
+          <PDFViewer
+            pdfUrl={api.getPdfProxyUrl(paper.arxiv_id)}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+
+        <div className="viewer-sidebar">
+          <div className="sidebar-tabs">
+            <button
+              className={`sidebar-tab ${activePanel === 'comments' ? 'active' : ''}`}
+              onClick={() => setActivePanel('comments')}
+            >
+              Comments ({comments.length})
+            </button>
+            <button
+              className={`sidebar-tab ${activePanel === 'tags' ? 'active' : ''}`}
+              onClick={() => setActivePanel('tags')}
+            >
+              Tags ({paperTags.length})
+            </button>
+            <button
+              className={`sidebar-tab ${activePanel === 'export' ? 'active' : ''}`}
+              onClick={() => setActivePanel('export')}
+            >
+              Export
+            </button>
+            <button
+              className={`sidebar-tab ${activePanel === 'info' ? 'active' : ''}`}
+              onClick={() => setActivePanel('info')}
+            >
+              Info
+            </button>
+          </div>
+
+          <div className="sidebar-content">
+            {activePanel === 'comments' && (
+              <CommentPanel
+                paperId={paper.id}
+                comments={comments}
+                currentPage={currentPage}
+                onRefresh={loadComments}
+                showNotification={showNotification}
+              />
+            )}
+            {activePanel === 'tags' && (
+              <TagPanel
+                paperId={paper.id}
+                paperTags={paperTags}
+                allTags={allTags}
+                onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
+                showNotification={showNotification}
+              />
+            )}
+            {activePanel === 'export' && (
+              <ExportPanel
+                paper={paper}
+                showNotification={showNotification}
+              />
+            )}
+            {activePanel === 'info' && (
+              <div className="info-panel">
+                <div className="info-section">
+                  <h4>Abstract</h4>
+                  <p>{paper.summary}</p>
+                </div>
+                <div className="info-section">
+                  <h4>Authors</h4>
+                  <p>{authors.join(', ')}</p>
+                </div>
+                <div className="info-section">
+                  <h4>Categories</h4>
+                  <p>{categories.join(', ')}</p>
+                </div>
+                <div className="info-section">
+                  <h4>ArXiv ID</h4>
+                  <p>{paper.arxiv_id}</p>
+                </div>
+                {paper.doi && (
+                  <div className="info-section">
+                    <h4>DOI</h4>
+                    <p>{paper.doi}</p>
+                  </div>
+                )}
+                {paper.journal_ref && (
+                  <div className="info-section">
+                    <h4>Journal</h4>
+                    <p>{paper.journal_ref}</p>
+                  </div>
+                )}
+                <div className="info-section">
+                  <h4>Published</h4>
+                  <p>{new Date(paper.published).toLocaleDateString()}</p>
+                </div>
+                <div className="info-section">
+                  <h4>Last Updated</h4>
+                  <p>{new Date(paper.updated).toLocaleDateString()}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
