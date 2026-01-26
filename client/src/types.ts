@@ -55,4 +55,9 @@ export interface CategoryGroup {
   categories: Record<string, string>;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer';
