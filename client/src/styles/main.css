@@ -2292,10 +2292,78 @@ input[type="color"] {
   border-radius: 50%;
 }
 
+.wl-discover-search {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.wl-discover-search::placeholder {
+  color: var(--text-muted);
+}
+
+.wl-discover-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wl-discover-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wl-discover-view-btn {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.wl-discover-import-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  border-radius: 50%;
+}
+
 .wl-discover-in-lib {
   flex-shrink: 0;
   font-size: 13px;
   color: var(--success, #22c55e);
   width: 24px;
+  text-align: center;
+}
+
+.wl-discover-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+
+.wl-discover-pager .btn {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.wl-discover-pager-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 40px;
   text-align: center;
 }

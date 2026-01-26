@@ -40,6 +40,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [discoveryPaperId, setDiscoveryPaperId] = useState<number | null>(null);
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
   const [discoveryTab, setDiscoveryTab] = useState<'citations' | 'references'>('citations');
+  const [discoverySearch, setDiscoverySearch] = useState('');
+  const [discoveryPage, setDiscoveryPage] = useState(0);
+  const DISCOVERY_PAGE_SIZE = 10;
 
   const loadData = useCallback(async () => {
     try {
@@ -801,6 +804,21 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
               const selectedPaper = papers.find(p => p.id === selectedId);
               if (!selectedPaper) return null;
 
+              // Filter and paginate discovery results
+              const currentList = discoveryResult && discoveryPaperId === selectedId
+                ? (discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references)
+                : [];
+              const searchLower = discoverySearch.toLowerCase();
+              const filtered = searchLower
+                ? currentList.filter(s2p =>
+                    s2p.title.toLowerCase().includes(searchLower) ||
+                    (s2p.authors || []).some(a => a.name.toLowerCase().includes(searchLower))
+                  )
+                : currentList;
+              const totalPages = Math.max(1, Math.ceil(filtered.length / DISCOVERY_PAGE_SIZE));
+              const safePage = Math.min(discoveryPage, totalPages - 1);
+              const pageItems = filtered.slice(safePage * DISCOVERY_PAGE_SIZE, (safePage + 1) * DISCOVERY_PAGE_SIZE);
+
               return (
                 <div className="wl-section wl-discover-section">
                   <div className="wl-section-header">
@@ -826,38 +844,58 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                       <div className="wl-discover-tabs">
                         <button
                           className={`btn btn-sm ${discoveryTab === 'citations' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => setDiscoveryTab('citations')}
+                          onClick={() => { setDiscoveryTab('citations'); setDiscoveryPage(0); }}
                         >
                           Cited by ({discoveryResult.citations.length})
                         </button>
                         <button
                           className={`btn btn-sm ${discoveryTab === 'references' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => setDiscoveryTab('references')}
+                          onClick={() => { setDiscoveryTab('references'); setDiscoveryPage(0); }}
                         >
                           References ({discoveryResult.references.length})
                         </button>
                       </div>
 
-                      <div className="wl-discover-list">
-                        {(discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references)
-                          .map((s2p, idx) => {
-                            const arxivId = s2p.externalIds?.ArXiv;
-                            const inLib = isInLibrary(s2p);
-                            const importing = arxivId ? importingIds.has(arxivId) : false;
-                            const authorStr = s2p.authors?.slice(0, 2).map(a => a.name).join(', ') || 'Unknown';
-                            const direction = discoveryTab === 'citations' ? 'cited_by' as const : 'cites' as const;
+                      <input
+                        type="text"
+                        className="wl-discover-search"
+                        placeholder="Filter by title or author..."
+                        value={discoverySearch}
+                        onChange={e => { setDiscoverySearch(e.target.value); setDiscoveryPage(0); }}
+                      />
 
-                            return (
-                              <div key={s2p.paperId || idx} className="wl-discover-item">
-                                <div className="wl-discover-item-info">
-                                  <span className="wl-discover-item-title" title={s2p.title}>
-                                    {s2p.title.length > 55 ? s2p.title.substring(0, 52) + '...' : s2p.title}
-                                  </span>
-                                  <span className="wl-discover-item-meta">
-                                    {authorStr}{s2p.year ? ` (${s2p.year})` : ''}
-                                    {arxivId ? ' · arXiv' : ''}
-                                  </span>
-                                </div>
+                      <div className="wl-discover-list">
+                        {pageItems.map((s2p, idx) => {
+                          const arxivId = s2p.externalIds?.ArXiv;
+                          const inLib = isInLibrary(s2p);
+                          const importing = arxivId ? importingIds.has(arxivId) : false;
+                          const authorStr = s2p.authors?.slice(0, 2).map(a => a.name).join(', ') || 'Unknown';
+                          const direction = discoveryTab === 'citations' ? 'cited_by' as const : 'cites' as const;
+                          const viewUrl = arxivId
+                            ? `https://arxiv.org/abs/${arxivId}`
+                            : s2p.url || `https://www.semanticscholar.org/paper/${s2p.paperId}`;
+
+                          return (
+                            <div key={s2p.paperId || idx} className="wl-discover-item">
+                              <div className="wl-discover-item-info">
+                                <span className="wl-discover-item-title" title={s2p.title}>
+                                  {s2p.title.length > 50 ? s2p.title.substring(0, 47) + '...' : s2p.title}
+                                </span>
+                                <span className="wl-discover-item-meta">
+                                  {authorStr}{s2p.year ? ` (${s2p.year})` : ''}
+                                  {arxivId ? ' · arXiv' : ''}
+                                </span>
+                              </div>
+                              <div className="wl-discover-item-actions">
+                                <a
+                                  className="btn btn-sm btn-secondary wl-discover-view-btn"
+                                  href={viewUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View paper"
+                                >
+                                  View
+                                </a>
                                 {arxivId && !inLib && (
                                   <button
                                     className="btn btn-sm btn-success wl-discover-import-btn"
@@ -869,15 +907,40 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                                   </button>
                                 )}
                                 {inLib && (
-                                  <span className="wl-discover-in-lib" title="Already in library">✓</span>
+                                  <span className="wl-discover-in-lib" title="Already in library">&#10003;</span>
                                 )}
                               </div>
-                            );
-                          })}
-                        {(discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references).length === 0 && (
-                          <p className="muted">No {discoveryTab} found.</p>
+                            </div>
+                          );
+                        })}
+                        {filtered.length === 0 && (
+                          <p className="muted">
+                            {discoverySearch ? 'No matches.' : `No ${discoveryTab} found.`}
+                          </p>
                         )}
                       </div>
+
+                      {totalPages > 1 && (
+                        <div className="wl-discover-pager">
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            disabled={safePage === 0}
+                            onClick={() => setDiscoveryPage(safePage - 1)}
+                          >
+                            Prev
+                          </button>
+                          <span className="wl-discover-pager-info">
+                            {safePage + 1} / {totalPages}
+                          </span>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            disabled={safePage >= totalPages - 1}
+                            onClick={() => setDiscoveryPage(safePage + 1)}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
