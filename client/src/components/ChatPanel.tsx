@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
 import { ChatMessage, SavedPaper } from '../types';
 import * as api from '../services/api';
 
@@ -99,8 +100,12 @@ export default function ChatPanel({ paper, showNotification }: Props) {
             <div className="chat-message-label">
               {msg.role === 'user' ? 'You' : 'Claude'}
             </div>
-            <div className="chat-message-content">
-              {msg.content}
+            <div className={`chat-message-content ${msg.role === 'assistant' ? 'markdown-body' : ''}`}>
+              {msg.role === 'assistant' ? (
+                <Markdown>{msg.content}</Markdown>
+              ) : (
+                msg.content
+              )}
             </div>
           </div>
         ))}
