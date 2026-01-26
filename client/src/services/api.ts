@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline } from '../types';
 
 const BASE = '/api';
 
@@ -216,6 +216,63 @@ export async function verifyApiKey(apiKey: string): Promise<{ valid: boolean; er
     method: 'POST',
     body: JSON.stringify({ apiKey }),
   });
+}
+
+// Citations
+export async function getCitations(): Promise<Citation[]> {
+  return request('/worldlines/citations');
+}
+
+export async function addCitation(citingPaperId: number, citedPaperId: number): Promise<void> {
+  await request('/worldlines/citations', {
+    method: 'POST',
+    body: JSON.stringify({ citing_paper_id: citingPaperId, cited_paper_id: citedPaperId }),
+  });
+}
+
+export async function removeCitation(citingPaperId: number, citedPaperId: number): Promise<void> {
+  await request('/worldlines/citations', {
+    method: 'DELETE',
+    body: JSON.stringify({ citing_paper_id: citingPaperId, cited_paper_id: citedPaperId }),
+  });
+}
+
+// Worldlines
+export async function getWorldlines(): Promise<Worldline[]> {
+  return request('/worldlines');
+}
+
+export async function createWorldline(name: string, color: string): Promise<Worldline> {
+  return request('/worldlines', {
+    method: 'POST',
+    body: JSON.stringify({ name, color }),
+  });
+}
+
+export async function updateWorldline(id: number, name: string, color: string): Promise<void> {
+  await request(`/worldlines/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, color }),
+  });
+}
+
+export async function deleteWorldline(id: number): Promise<void> {
+  await request(`/worldlines/${id}`, { method: 'DELETE' });
+}
+
+export async function getWorldlinePapers(worldlineId: number): Promise<SavedPaper[]> {
+  return request(`/worldlines/${worldlineId}/papers`);
+}
+
+export async function addWorldlinePaper(worldlineId: number, paperId: number, position: number): Promise<void> {
+  await request(`/worldlines/${worldlineId}/papers`, {
+    method: 'POST',
+    body: JSON.stringify({ paper_id: paperId, position }),
+  });
+}
+
+export async function removeWorldlinePaper(worldlineId: number, paperId: number): Promise<void> {
+  await request(`/worldlines/${worldlineId}/papers/${paperId}`, { method: 'DELETE' });
 }
 
 // Settings (localStorage)

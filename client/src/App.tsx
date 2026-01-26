@@ -7,6 +7,7 @@ import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
 import FavoriteAuthors from './components/FavoriteAuthors';
 import ChatHistory from './components/ChatHistory';
+import WorldlinePanel from './components/WorldlinePanel';
 import SettingsModal from './components/SettingsModal';
 import ArxivRefreshTimer from './components/ArxivRefreshTimer';
 
@@ -133,6 +134,12 @@ export default function App() {
                 Favorite Authors ({favoriteAuthors.length})
               </button>
               <button
+                className={`nav-tab ${viewMode === 'worldline' ? 'active' : ''}`}
+                onClick={() => setViewMode('worldline')}
+              >
+                Worldlines
+              </button>
+              <button
                 className={`nav-tab ${viewMode === 'chatHistory' ? 'active' : ''}`}
                 onClick={() => setViewMode('chatHistory')}
               >
@@ -191,6 +198,13 @@ export default function App() {
             onOpenPaper={handleOpenArxivPaper}
             savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
             showNotification={showNotification}
+          />
+        )}
+        {viewMode === 'worldline' && (
+          <WorldlinePanel
+            papers={savedPapers}
+            showNotification={showNotification}
+            onRefresh={loadLibrary}
           />
         )}
         {viewMode === 'chatHistory' && (
