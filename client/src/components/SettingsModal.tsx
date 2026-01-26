@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as api from '../services/api';
+import { COLOR_SCHEMES, applyColorScheme, getSchemeById } from '../colorSchemes';
 
 interface Props {
   open: boolean;
@@ -9,6 +10,7 @@ interface Props {
 
 export default function SettingsModal({ open, onClose, showNotification }: Props) {
   const [apiKey, setApiKey] = useState('');
+  const [colorScheme, setColorScheme] = useState('default-dark');
   const [verifying, setVerifying] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
@@ -16,15 +18,34 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
     if (open) {
       const settings = api.getSettings();
       setApiKey(settings.claudeApiKey);
+      setColorScheme(settings.colorScheme);
       setShowKey(false);
     }
   }, [open]);
 
   if (!open) return null;
 
+  const handleSchemeChange = (schemeId: string) => {
+    setColorScheme(schemeId);
+    const scheme = getSchemeById(schemeId);
+    if (scheme) {
+      applyColorScheme(scheme);
+    }
+  };
+
   const handleSave = () => {
-    api.saveSettings({ claudeApiKey: apiKey.trim() });
+    api.saveSettings({ claudeApiKey: apiKey.trim(), colorScheme });
     showNotification('Settings saved');
+    onClose();
+  };
+
+  const handleCancel = () => {
+    // Revert color scheme to saved value
+    const settings = api.getSettings();
+    const scheme = getSchemeById(settings.colorScheme);
+    if (scheme) {
+      applyColorScheme(scheme);
+    }
     onClose();
   };
 
@@ -52,22 +73,72 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
 
   const handleClear = () => {
     setApiKey('');
-    api.saveSettings({ claudeApiKey: '' });
+    api.saveSettings({ claudeApiKey: '', colorScheme });
     showNotification('API key removed');
   };
 
   const maskedKey = apiKey ? apiKey.slice(0, 10) + '...' + apiKey.slice(-4) : '';
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
+    <div className="settings-overlay" onClick={handleCancel}>
       <div className="settings-modal" onClick={e => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Settings</h2>
-          <button className="btn-icon" onClick={onClose}>&times;</button>
+          <button className="btn-icon" onClick={handleCancel}>&times;</button>
         </div>
 
         <div className="settings-body">
           <div className="settings-section">
+            <h3>Color Scheme</h3>
+            <p className="settings-description">
+              Choose a color scheme for the application. Changes preview instantly.
+            </p>
+
+            <div className="scheme-grid">
+              {COLOR_SCHEMES.map(scheme => (
+                <button
+                  key={scheme.id}
+                  className={`scheme-card ${colorScheme === scheme.id ? 'active' : ''}`}
+                  onClick={() => handleSchemeChange(scheme.id)}
+                >
+                  <div className="scheme-preview">
+                    <div
+                      className="scheme-swatch-bg"
+                      style={{ background: scheme.colors.bgPrimary }}
+                    >
+                      <div
+                        className="scheme-swatch-bar"
+                        style={{ background: scheme.colors.bgSecondary, borderBottom: `2px solid ${scheme.colors.borderColor}` }}
+                      />
+                      <div className="scheme-swatch-body">
+                        <div
+                          className="scheme-swatch-card"
+                          style={{ background: scheme.colors.bgCard, border: `1px solid ${scheme.colors.borderColor}` }}
+                        >
+                          <div
+                            className="scheme-swatch-text"
+                            style={{ background: scheme.colors.textPrimary }}
+                          />
+                          <div
+                            className="scheme-swatch-text short"
+                            style={{ background: scheme.colors.textSecondary }}
+                          />
+                        </div>
+                        <div
+                          className="scheme-swatch-accent"
+                          style={{ background: scheme.colors.accent }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <span className="scheme-name">{scheme.name}</span>
+                  <span className="scheme-type">{scheme.type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-section" style={{ marginTop: 24 }}>
             <h3>Claude API</h3>
             <p className="settings-description">
               Connect your Claude API key to use the AI chat feature when viewing papers.
@@ -127,7 +198,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
         </div>
 
         <div className="settings-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-secondary" onClick={handleCancel}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave}>Save</button>
         </div>
       </div>

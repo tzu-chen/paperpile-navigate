@@ -1123,7 +1123,7 @@ input[type="color"] {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  width: 520px;
+  width: 600px;
   max-width: 90vw;
   max-height: 80vh;
   display: flex;
@@ -1226,6 +1226,109 @@ input[type="color"] {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--border-color);
+}
+
+/* ========================
+   Color Scheme Picker
+   ======================== */
+.scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.scheme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.scheme-card:hover {
+  border-color: var(--accent);
+}
+
+.scheme-card.active {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.scheme-preview {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.scheme-swatch-bg {
+  width: 100%;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.scheme-swatch-bar {
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.scheme-swatch-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.scheme-swatch-card {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  padding: 4px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+}
+
+.scheme-swatch-text {
+  height: 3px;
+  border-radius: 1px;
+  width: 80%;
+}
+
+.scheme-swatch-text.short {
+  width: 50%;
+}
+
+.scheme-swatch-accent {
+  width: 8px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.scheme-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.scheme-type {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 /* ========================
