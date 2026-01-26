@@ -278,8 +278,7 @@ export async function removeWorldlinePaper(worldlineId: number, paperId: number)
 // Batch Import Worldline
 export async function batchImportWorldline(
   arxivIds: string[],
-  worldlineName: string,
-  worldlineColor?: string
+  worldline: { name: string; color?: string } | { id: number }
 ): Promise<{
   success: boolean;
   papers_added: number;
@@ -287,13 +286,16 @@ export async function batchImportWorldline(
   worldline_id: number;
   errors: string[];
 }> {
+  const body: Record<string, unknown> = { arxiv_ids: arxivIds };
+  if ('id' in worldline) {
+    body.worldline_id = worldline.id;
+  } else {
+    body.worldline_name = worldline.name;
+    body.worldline_color = worldline.color;
+  }
   return request('/worldlines/batch-import', {
     method: 'POST',
-    body: JSON.stringify({
-      arxiv_ids: arxivIds,
-      worldline_name: worldlineName,
-      worldline_color: worldlineColor,
-    }),
+    body: JSON.stringify(body),
   });
 }
 

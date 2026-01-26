@@ -100,16 +100,16 @@ router.post('/citations/import', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/worldlines/batch-import — batch import papers, infer citations, create worldline
+// POST /api/worldlines/batch-import — batch import papers, infer citations, create or add to worldline
 router.post('/batch-import', async (req: Request, res: Response) => {
   try {
-    const { arxiv_ids, worldline_name, worldline_color } = req.body;
+    const { arxiv_ids, worldline_name, worldline_color, worldline_id } = req.body;
 
     if (!arxiv_ids || !Array.isArray(arxiv_ids) || arxiv_ids.length === 0) {
       return res.status(400).json({ error: 'arxiv_ids array is required' });
     }
-    if (!worldline_name || !worldline_name.trim()) {
-      return res.status(400).json({ error: 'worldline_name is required' });
+    if (!worldline_id && (!worldline_name || !worldline_name.trim())) {
+      return res.status(400).json({ error: 'worldline_name or worldline_id is required' });
     }
 
     // Normalize IDs: strip version suffixes (e.g. "2301.00001v1" -> "2301.00001")
@@ -188,23 +188,36 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       }
     }
 
-    // Step 3: Create worldline
-    const wlResult = db.createWorldline(worldline_name.trim(), worldline_color || '#6366f1');
-    const worldlineId = wlResult.lastInsertRowid as number;
+    // Step 3: Create new worldline or use existing one
+    let targetWorldlineId: number;
+    if (worldline_id) {
+      targetWorldlineId = worldline_id;
+    } else {
+      const wlResult = db.createWorldline(worldline_name.trim(), worldline_color || '#6366f1');
+      targetWorldlineId = wlResult.lastInsertRowid as number;
+    }
+
+    // Get existing paper count for position offset when adding to existing worldline
+    const existingPapers = worldline_id ? db.getWorldlinePapers(targetWorldlineId) : [];
+    const positionOffset = existingPapers.length;
 
     // Add papers sorted by publication date
     const sortedPapers = savedPapers.sort(
       (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
     );
     for (let i = 0; i < sortedPapers.length; i++) {
-      db.addWorldlinePaper(worldlineId, sortedPapers[i].id, i);
+      try {
+        db.addWorldlinePaper(targetWorldlineId, sortedPapers[i].id, positionOffset + i);
+      } catch {
+        // paper may already be in worldline — ignore
+      }
     }
 
     res.status(201).json({
       success: true,
       papers_added: savedPapers.length,
       citations_created: citationsCreated,
-      worldline_id: worldlineId,
+      worldline_id: targetWorldlineId,
       errors,
     });
   } catch (error) {

@@ -50,6 +50,8 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [importWlColor, setImportWlColor] = useState('#6366f1');
   const [importLoading, setImportLoading] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importWlMode, setImportWlMode] = useState<'new' | 'existing'>('new');
+  const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
   // Collapsible sections
   const [citationsOpen, setCitationsOpen] = useState(true);
@@ -637,7 +639,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
     return papers.some(p => p.arxiv_id === arxivId);
   }, [papers]);
 
-  // Batch import: save papers, infer citations, create worldline
+  // Batch import: save papers, infer citations, create or add to worldline
   const handleBatchImport = async () => {
     const ids = importArxivIds
       .split(/[\n,]+/)
@@ -647,15 +649,22 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       showNotification('Enter at least one ArXiv ID');
       return;
     }
-    if (!importWlName.trim()) {
+    if (importWlMode === 'new' && !importWlName.trim()) {
       showNotification('Enter a worldline name');
+      return;
+    }
+    if (importWlMode === 'existing' && importExistingWlId === null) {
+      showNotification('Select an existing worldline');
       return;
     }
 
     setImportLoading(true);
     setImportStatus(`Importing ${ids.length} papers and inferring citations...`);
     try {
-      const result = await api.batchImportWorldline(ids, importWlName.trim(), importWlColor);
+      const wlArg = importWlMode === 'existing'
+        ? { id: importExistingWlId! }
+        : { name: importWlName.trim(), color: importWlColor };
+      const result = await api.batchImportWorldline(ids, wlArg);
       const parts: string[] = [];
       parts.push(`${result.papers_added} papers added`);
       parts.push(`${result.citations_created} citations inferred`);
@@ -663,10 +672,13 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         parts.push(`${result.errors.length} errors`);
       }
       setImportStatus(`Done: ${parts.join(', ')}`);
+      const wlLabel = importWlMode === 'existing'
+        ? worldlines.find(w => w.id === importExistingWlId)?.name || 'worldline'
+        : importWlName.trim();
       if (result.errors.length > 0) {
         showNotification(`Import finished with errors: ${result.errors.join('; ')}`);
       } else {
-        showNotification(`Worldline "${importWlName.trim()}" created with ${result.papers_added} papers and ${result.citations_created} citations`);
+        showNotification(`Worldline "${wlLabel}" — ${result.papers_added} papers, ${result.citations_created} citations`);
       }
       setImportArxivIds('');
       setImportWlName('');
@@ -785,7 +797,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
               <div className="wl-section wl-import-section">
                 <h4>Batch Import Worldline</h4>
                 <p className="wl-import-hint">
-                  Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library, citations between them inferred from Semantic Scholar, and a worldline created.
+                  Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library with citations inferred from Semantic Scholar.
                 </p>
                 <textarea
                   className="wl-import-textarea"
@@ -795,29 +807,76 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                   rows={6}
                   disabled={importLoading}
                 />
-                <div className="wl-import-form-row">
-                  <input
-                    type="text"
-                    className="wl-import-name"
-                    placeholder="Worldline name..."
-                    value={importWlName}
-                    onChange={e => setImportWlName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && !importLoading && handleBatchImport()}
+
+                <div className="wl-import-wl-toggle">
+                  <button
+                    className={`btn btn-sm ${importWlMode === 'new' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setImportWlMode('new')}
                     disabled={importLoading}
-                  />
-                  <input
-                    type="color"
-                    value={importWlColor}
-                    onChange={e => setImportWlColor(e.target.value)}
-                    disabled={importLoading}
-                  />
+                  >
+                    New Worldline
+                  </button>
+                  <button
+                    className={`btn btn-sm ${importWlMode === 'existing' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setImportWlMode('existing')}
+                    disabled={importLoading || worldlines.length === 0}
+                    title={worldlines.length === 0 ? 'No existing worldlines' : ''}
+                  >
+                    Existing
+                  </button>
                 </div>
+
+                {importWlMode === 'new' && (
+                  <div className="wl-import-form-row">
+                    <input
+                      type="text"
+                      className="wl-import-name"
+                      placeholder="Worldline name..."
+                      value={importWlName}
+                      onChange={e => setImportWlName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !importLoading && handleBatchImport()}
+                      disabled={importLoading}
+                    />
+                    <input
+                      type="color"
+                      value={importWlColor}
+                      onChange={e => setImportWlColor(e.target.value)}
+                      disabled={importLoading}
+                    />
+                  </div>
+                )}
+
+                {importWlMode === 'existing' && (
+                  <select
+                    className="wl-import-select"
+                    value={importExistingWlId ?? ''}
+                    onChange={e => setImportExistingWlId(e.target.value ? Number(e.target.value) : null)}
+                    disabled={importLoading}
+                  >
+                    <option value="">Select a worldline...</option>
+                    {worldlines.map(wl => (
+                      <option key={wl.id} value={wl.id}>
+                        {wl.name} ({wl.paperIds.size} papers)
+                      </option>
+                    ))}
+                  </select>
+                )}
+
                 <button
                   className="btn btn-primary wl-import-submit"
                   onClick={handleBatchImport}
-                  disabled={importLoading || !importArxivIds.trim() || !importWlName.trim()}
+                  disabled={
+                    importLoading ||
+                    !importArxivIds.trim() ||
+                    (importWlMode === 'new' && !importWlName.trim()) ||
+                    (importWlMode === 'existing' && importExistingWlId === null)
+                  }
                 >
-                  {importLoading ? 'Importing...' : 'Create Worldline'}
+                  {importLoading
+                    ? 'Importing...'
+                    : importWlMode === 'new'
+                      ? 'Create Worldline'
+                      : 'Add to Worldline'}
                 </button>
                 {importStatus && (
                   <div className="wl-import-status">{importStatus}</div>
