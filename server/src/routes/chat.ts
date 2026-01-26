@@ -2,6 +2,38 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
+// Simple in-memory cache for fetched PDFs (base64), keyed by arxiv ID.
+// Avoids re-downloading the same PDF across messages in a conversation.
+const pdfCache = new Map<string, { data: string; fetchedAt: number }>();
+const PDF_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+async function fetchPdfBase64(arxivId: string): Promise<string> {
+  const cached = pdfCache.get(arxivId);
+  if (cached && Date.now() - cached.fetchedAt < PDF_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
+  const response = await fetch(pdfUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString('base64');
+
+  pdfCache.set(arxivId, { data: base64, fetchedAt: Date.now() });
+
+  // Evict stale entries
+  for (const [key, entry] of pdfCache) {
+    if (Date.now() - entry.fetchedAt > PDF_CACHE_TTL) {
+      pdfCache.delete(key);
+    }
+  }
+
+  return base64;
+}
+
 interface ChatRequest {
   messages: { role: 'user' | 'assistant'; content: string }[];
   apiKey: string;
@@ -14,7 +46,7 @@ interface ChatRequest {
   };
 }
 
-// POST /api/chat - Send a message to Claude with paper context
+// POST /api/chat - Send a message to Claude with the full PDF document
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { messages, apiKey, paperContext } = req.body as ChatRequest;
@@ -27,17 +59,59 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Messages are required' });
     }
 
-    const systemPrompt = `You are a research assistant helping analyze an academic paper. Here is the paper context:
+    // Fetch the PDF and encode as base64
+    let pdfBase64: string | null = null;
+    try {
+      pdfBase64 = await fetchPdfBase64(paperContext.arxivId);
+    } catch (err) {
+      console.error('Failed to fetch PDF for chat:', err);
+      // Continue without PDF — fall back to metadata-only context
+    }
+
+    const systemPrompt = `You are a research assistant helping analyze an academic paper.
 
 Title: ${paperContext.title}
 Authors: ${paperContext.authors.join(', ')}
 ArXiv ID: ${paperContext.arxivId}
 Categories: ${paperContext.categories.join(', ')}
 
-Abstract:
-${paperContext.summary}
+${pdfBase64 ? 'The full PDF of the paper is attached to the first message.' : `Abstract:\n${paperContext.summary}\n\n(The PDF could not be loaded. Answer based on the abstract above.)`}
 
-You have access to the paper's content through the PDF the user is viewing. Help the user understand the paper, answer questions about its methodology, results, and implications. Be concise and precise in your responses.`;
+Help the user understand the paper, answer questions about its methodology, results, and implications. Be concise and precise in your responses.`;
+
+    // Build the messages array for Claude, attaching the PDF document
+    // to the first user message as a content block.
+    const claudeMessages: any[] = [];
+    let pdfAttached = false;
+
+    for (const msg of messages) {
+      if (msg.role === 'user' && !pdfAttached && pdfBase64) {
+        // First user message: include PDF document + text
+        claudeMessages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: pdfBase64,
+              },
+            },
+            {
+              type: 'text',
+              text: msg.content,
+            },
+          ],
+        });
+        pdfAttached = true;
+      } else {
+        claudeMessages.push({
+          role: msg.role,
+          content: msg.content,
+        });
+      }
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -50,10 +124,7 @@ You have access to the paper's content through the PDF the user is viewing. Help
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2048,
         system: systemPrompt,
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: claudeMessages,
       }),
     });
 
