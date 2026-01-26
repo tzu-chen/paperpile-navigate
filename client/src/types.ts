@@ -69,4 +69,18 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory';
+export interface Citation {
+  id: number;
+  citing_paper_id: number;
+  cited_paper_id: number;
+  created_at?: string;
+}
+
+export interface Worldline {
+  id: number;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory' | 'worldline';

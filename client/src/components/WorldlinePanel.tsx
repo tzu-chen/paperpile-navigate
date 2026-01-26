@@ -1,0 +1,857 @@
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import * as d3 from 'd3';
+import { SavedPaper, Citation, Worldline } from '../types';
+import * as api from '../services/api';
+
+interface Props {
+  papers: SavedPaper[];
+  showNotification: (msg: string) => void;
+  onRefresh: () => Promise<void>;
+}
+
+interface WorldlineWithPapers extends Worldline {
+  paperIds: Set<number>;
+}
+
+type InteractionMode = 'select' | 'cite';
+
+export default function WorldlinePanel({ papers, showNotification, onRefresh }: Props) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [citations, setCitations] = useState<Citation[]>([]);
+  const [worldlines, setWorldlines] = useState<WorldlineWithPapers[]>([]);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
+  const [hoveredPaperId, setHoveredPaperId] = useState<number | null>(null);
+  const [activeWorldlineId, setActiveWorldlineId] = useState<number | null>(null);
+  const [mode, setMode] = useState<InteractionMode>('select');
+  const [citeSrcId, setCiteSrcId] = useState<number | null>(null);
+
+  // Worldline creation form
+  const [newWlName, setNewWlName] = useState('');
+  const [newWlColor, setNewWlColor] = useState('#6366f1');
+
+  // Sidebar collapse
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [cites, wls] = await Promise.all([
+        api.getCitations(),
+        api.getWorldlines(),
+      ]);
+      setCitations(cites);
+
+      // Load paper IDs for each worldline
+      const wlsWithPapers: WorldlineWithPapers[] = await Promise.all(
+        wls.map(async (wl) => {
+          const wlPapers = await api.getWorldlinePapers(wl.id);
+          return { ...wl, paperIds: new Set(wlPapers.map((p: SavedPaper) => p.id)) };
+        })
+      );
+      setWorldlines(wlsWithPapers);
+    } catch (err) {
+      console.error('Failed to load worldline data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Compute paper positions: x is spread by category, y is time
+  const paperPositions = useMemo(() => {
+    if (papers.length === 0) return new Map<number, { x: number; y: number }>();
+
+    // Parse dates and find time range
+    const parsedPapers = papers.map(p => ({
+      ...p,
+      date: new Date(p.published),
+      cats: (() => { try { return JSON.parse(p.categories); } catch { return []; } })() as string[],
+    }));
+
+    // Group by primary category for x-spread
+    const catGroups = new Map<string, number[]>();
+    parsedPapers.forEach(p => {
+      const primaryCat = p.cats[0] || 'unknown';
+      if (!catGroups.has(primaryCat)) catGroups.set(primaryCat, []);
+      catGroups.get(primaryCat)!.push(p.id);
+    });
+
+    const catKeys = Array.from(catGroups.keys()).sort();
+    const catXMap = new Map<string, number>();
+    catKeys.forEach((cat, i) => {
+      catXMap.set(cat, (i + 1) / (catKeys.length + 1));
+    });
+
+    const positions = new Map<number, { x: number; y: number }>();
+    // Track occupancy within each category for sub-spreading
+    const catCounters = new Map<string, number>();
+
+    parsedPapers.forEach(p => {
+      const primaryCat = p.cats[0] || 'unknown';
+      const baseX = catXMap.get(primaryCat) || 0.5;
+      const count = catCounters.get(primaryCat) || 0;
+      catCounters.set(primaryCat, count + 1);
+
+      // Add small horizontal jitter based on count within category
+      const groupSize = catGroups.get(primaryCat)?.length || 1;
+      const jitter = groupSize > 1 ? ((count / (groupSize - 1)) - 0.5) * 0.06 : 0;
+
+      positions.set(p.id, {
+        x: baseX + jitter,
+        y: p.date.getTime(),
+      });
+    });
+
+    return positions;
+  }, [papers]);
+
+  // Get active worldline
+  const activeWorldline = worldlines.find(w => w.id === activeWorldlineId) || null;
+
+  // Track tooltip position in page coordinates
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+
+  // D3 rendering — builds the full SVG. Does NOT depend on hoveredPaperId
+  // so hovering never causes a full re-render.
+  useEffect(() => {
+    if (!svgRef.current || !containerRef.current || papers.length === 0) return;
+
+    const svg = d3.select(svgRef.current);
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    svg.attr('width', width).attr('height', height);
+
+    // Clear previous content
+    svg.selectAll('*').remove();
+
+    const margin = { top: 40, right: 30, bottom: 40, left: 80 };
+    const innerW = width - margin.left - margin.right;
+    const innerH = height - margin.top - margin.bottom;
+
+    // Scales
+    const dates = papers.map(p => new Date(p.published));
+    const minDate = d3.min(dates)!;
+    const maxDate = d3.max(dates)!;
+    // Add padding to date range
+    const dateRange = maxDate.getTime() - minDate.getTime();
+    const datePadding = dateRange * 0.05 || 86400000; // 1 day if all same date
+
+    const yScale = d3.scaleTime()
+      .domain([new Date(minDate.getTime() - datePadding), new Date(maxDate.getTime() + datePadding)])
+      .range([innerH, 0]);
+
+    const xScale = d3.scaleLinear()
+      .domain([0, 1])
+      .range([0, innerW]);
+
+    // Create main group with zoom
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Clip path
+    svg.append('defs').append('clipPath')
+      .attr('id', 'chart-clip')
+      .append('rect')
+      .attr('width', innerW)
+      .attr('height', innerH);
+
+    const chartArea = g.append('g').attr('clip-path', 'url(#chart-clip)');
+
+    // Zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.3, 10])
+      .on('zoom', (event) => {
+        chartArea.attr('transform', event.transform.toString());
+        // Update axes
+        const newYScale = event.transform.rescaleY(yScale);
+        const newXScale = event.transform.rescaleX(xScale);
+        yAxisG.call(d3.axisLeft(newYScale).ticks(8));
+        xAxisG.call(d3.axisBottom(newXScale).ticks(0)); // hide x ticks
+      });
+
+    svg.call(zoom);
+
+    // Axes
+    const yAxisG = g.append('g')
+      .call(d3.axisLeft(yScale).ticks(8))
+      .attr('class', 'wl-axis');
+
+    const xAxisG = g.append('g')
+      .attr('transform', `translate(0,${innerH})`)
+      .call(d3.axisBottom(xScale).ticks(0))
+      .attr('class', 'wl-axis');
+
+    // Category labels at the top
+    const catGroups = new Map<string, number>();
+    papers.forEach(p => {
+      try {
+        const cats = JSON.parse(p.categories) as string[];
+        const cat = cats[0] || 'unknown';
+        if (!catGroups.has(cat)) {
+          const pos = paperPositions.get(p.id);
+          if (pos) catGroups.set(cat, pos.x);
+        }
+      } catch {}
+    });
+
+    catGroups.forEach((xPos, cat) => {
+      g.append('text')
+        .attr('x', xScale(xPos))
+        .attr('y', -10)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-muted)')
+        .attr('font-size', '10px')
+        .text(cat);
+    });
+
+    // Draw citation edges — always visible with persistent styling
+    const citationLines = chartArea.append('g').attr('class', 'citation-lines');
+
+    citations.forEach(c => {
+      const srcPos = paperPositions.get(c.citing_paper_id);
+      const tgtPos = paperPositions.get(c.cited_paper_id);
+      if (!srcPos || !tgtPos) return;
+
+      // Check if this edge belongs to any worldline
+      let edgeColor = 'var(--text-muted)';
+      let edgeWidth = 1.5;
+      let edgeOpacity = 0.5;
+
+      worldlines.forEach(wl => {
+        if (wl.paperIds.has(c.citing_paper_id) && wl.paperIds.has(c.cited_paper_id)) {
+          edgeColor = wl.color;
+          edgeWidth = 2.5;
+          edgeOpacity = 0.85;
+        }
+      });
+
+      const lineEl = citationLines.append('line')
+        .attr('x1', xScale(srcPos.x))
+        .attr('y1', yScale(srcPos.y))
+        .attr('x2', xScale(tgtPos.x))
+        .attr('y2', yScale(tgtPos.y))
+        .attr('stroke', edgeColor)
+        .attr('stroke-width', edgeWidth)
+        .attr('stroke-opacity', edgeOpacity)
+        .attr('data-citing', c.citing_paper_id)
+        .attr('data-cited', c.cited_paper_id);
+
+      // Arrow head pointing from citing to cited
+      const dx = xScale(tgtPos.x) - xScale(srcPos.x);
+      const dy = yScale(tgtPos.y) - yScale(srcPos.y);
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 20) {
+        const ux = dx / len;
+        const uy = dy / len;
+        const arrowSize = 6;
+        const midX = xScale(srcPos.x) + dx * 0.6;
+        const midY = yScale(srcPos.y) + dy * 0.6;
+
+        citationLines.append('polygon')
+          .attr('points', [
+            [midX + ux * arrowSize, midY + uy * arrowSize],
+            [midX - uy * arrowSize * 0.5, midY + ux * arrowSize * 0.5],
+            [midX + uy * arrowSize * 0.5, midY - ux * arrowSize * 0.5],
+          ].map(p => p.join(',')).join(' '))
+          .attr('fill', edgeColor)
+          .attr('opacity', edgeOpacity)
+          .attr('data-citing', c.citing_paper_id)
+          .attr('data-cited', c.cited_paper_id);
+      }
+    });
+
+    // Draw worldline paths (connecting papers in a worldline in time order)
+    worldlines.forEach(wl => {
+      const wlPaperPositions = Array.from(wl.paperIds)
+        .map(id => ({ id, pos: paperPositions.get(id) }))
+        .filter((p): p is { id: number; pos: { x: number; y: number } } => !!p.pos)
+        .sort((a, b) => a.pos.y - b.pos.y); // sort by time
+
+      if (wlPaperPositions.length < 2) return;
+
+      const lineGen = d3.line<{ id: number; pos: { x: number; y: number } }>()
+        .x(d => xScale(d.pos.x))
+        .y(d => yScale(d.pos.y))
+        .curve(d3.curveCatmullRom.alpha(0.5));
+
+      chartArea.append('path')
+        .datum(wlPaperPositions)
+        .attr('d', lineGen)
+        .attr('fill', 'none')
+        .attr('stroke', wl.color)
+        .attr('stroke-width', 3)
+        .attr('stroke-opacity', 0.3)
+        .attr('stroke-linecap', 'round');
+    });
+
+    // Draw paper nodes
+    const nodes = chartArea.append('g').attr('class', 'paper-nodes');
+
+    papers.forEach(p => {
+      const pos = paperPositions.get(p.id);
+      if (!pos) return;
+
+      // Determine node appearance
+      let fillColor = 'var(--text-muted)';
+      let strokeColor = 'var(--border-color)';
+      let radius = 5;
+      let strokeWidth = 1.5;
+
+      // Check if in any worldline
+      const belongsToWorldlines: WorldlineWithPapers[] = [];
+      worldlines.forEach(wl => {
+        if (wl.paperIds.has(p.id)) {
+          belongsToWorldlines.push(wl);
+        }
+      });
+
+      if (belongsToWorldlines.length > 0) {
+        fillColor = belongsToWorldlines[0].color;
+        strokeColor = belongsToWorldlines[0].color;
+        radius = 7;
+        strokeWidth = 2;
+      }
+
+      const isSelected = selectedPaperIds.has(p.id);
+      if (isSelected) {
+        strokeColor = 'var(--accent)';
+        strokeWidth = 3;
+        radius = 8;
+      }
+
+      const isCiteSrc = citeSrcId === p.id;
+      if (isCiteSrc) {
+        strokeColor = 'var(--warning)';
+        strokeWidth = 3;
+        radius = 9;
+      }
+
+      const node = nodes.append('circle')
+        .attr('cx', xScale(pos.x))
+        .attr('cy', yScale(pos.y))
+        .attr('r', radius)
+        .attr('fill', fillColor)
+        .attr('stroke', strokeColor)
+        .attr('stroke-width', strokeWidth)
+        .attr('cursor', 'pointer')
+        .attr('data-paper-id', p.id)
+        // Store base values for hover restore
+        .attr('data-base-r', radius)
+        .attr('data-base-sw', strokeWidth);
+
+      // Hover handlers — update node directly via D3, plus set React state
+      // for the HTML tooltip. No full re-render.
+      node.on('mouseenter', function (event: MouseEvent) {
+        const el = d3.select(this);
+        const baseR = +el.attr('data-base-r');
+        const baseSW = +el.attr('data-base-sw');
+        el.attr('r', baseR + 2).attr('stroke-width', baseSW + 1);
+
+        // Highlight connected citation edges
+        svg.selectAll('.citation-lines line').each(function () {
+          const line = d3.select(this);
+          if (+line.attr('data-citing') === p.id || +line.attr('data-cited') === p.id) {
+            line.attr('stroke', 'var(--accent-hover)')
+              .attr('stroke-width', 3)
+              .attr('stroke-opacity', 1);
+          }
+        });
+        svg.selectAll('.citation-lines polygon').each(function () {
+          const poly = d3.select(this);
+          if (+poly.attr('data-citing') === p.id || +poly.attr('data-cited') === p.id) {
+            poly.attr('fill', 'var(--accent-hover)')
+              .attr('opacity', 1);
+          }
+        });
+
+        setHoveredPaperId(p.id);
+        setTooltipPos({ x: event.clientX, y: event.clientY });
+      });
+
+      node.on('mousemove', function (event: MouseEvent) {
+        setTooltipPos({ x: event.clientX, y: event.clientY });
+      });
+
+      node.on('mouseleave', function () {
+        const el = d3.select(this);
+        el.attr('r', el.attr('data-base-r'))
+          .attr('stroke-width', el.attr('data-base-sw'));
+
+        // Restore citation edges to their base style
+        svg.selectAll('.citation-lines line').each(function () {
+          const line = d3.select(this);
+          const citing = +line.attr('data-citing');
+          const cited = +line.attr('data-cited');
+          let color = 'var(--text-muted)';
+          let w = 1.5;
+          let op = 0.5;
+          worldlines.forEach(wl => {
+            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
+              color = wl.color; w = 2.5; op = 0.85;
+            }
+          });
+          line.attr('stroke', color).attr('stroke-width', w).attr('stroke-opacity', op);
+        });
+        svg.selectAll('.citation-lines polygon').each(function () {
+          const poly = d3.select(this);
+          const citing = +poly.attr('data-citing');
+          const cited = +poly.attr('data-cited');
+          let color = 'var(--text-muted)';
+          let op = 0.5;
+          worldlines.forEach(wl => {
+            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
+              color = wl.color; op = 0.85;
+            }
+          });
+          poly.attr('fill', color).attr('opacity', op);
+        });
+
+        setHoveredPaperId(null);
+        setTooltipPos(null);
+      });
+
+      node.on('click', (event: MouseEvent) => {
+        event.stopPropagation();
+        if (mode === 'cite') {
+          handleCiteClick(p.id);
+        } else {
+          toggleSelection(p.id);
+        }
+      });
+    });
+
+    // Axis styling
+    svg.selectAll('.wl-axis text')
+      .attr('fill', 'var(--text-muted)')
+      .attr('font-size', '11px');
+    svg.selectAll('.wl-axis line, .wl-axis path')
+      .attr('stroke', 'var(--border-color)');
+
+    // Y-axis label
+    g.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -innerH / 2)
+      .attr('y', -55)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-muted)')
+      .attr('font-size', '12px')
+      .text('Publication Date');
+
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, mode, citeSrcId]);
+
+  // Resize handler
+  useEffect(() => {
+    const handleResize = () => {
+      // Force re-render by toggling a ref
+      if (svgRef.current && containerRef.current) {
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        d3.select(svgRef.current).attr('width', width).attr('height', height);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSelection = (paperId: number) => {
+    setSelectedPaperIds(prev => {
+      const next = new Set(prev);
+      if (next.has(paperId)) next.delete(paperId);
+      else next.add(paperId);
+      return next;
+    });
+  };
+
+  const handleCiteClick = async (paperId: number) => {
+    if (citeSrcId === null) {
+      setCiteSrcId(paperId);
+      showNotification('Now click the paper that is cited by this paper');
+    } else {
+      if (citeSrcId === paperId) {
+        setCiteSrcId(null);
+        return;
+      }
+      try {
+        await api.addCitation(citeSrcId, paperId);
+        showNotification('Citation added');
+        setCiteSrcId(null);
+        await loadData();
+      } catch (err: any) {
+        showNotification(err.message || 'Failed to add citation');
+      }
+    }
+  };
+
+  const handleRemoveCitation = async (citingId: number, citedId: number) => {
+    try {
+      await api.removeCitation(citingId, citedId);
+      showNotification('Citation removed');
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to remove citation');
+    }
+  };
+
+  const handleCreateWorldline = async () => {
+    if (!newWlName.trim()) return;
+    try {
+      const wl = await api.createWorldline(newWlName.trim(), newWlColor);
+      // Add selected papers to this worldline
+      const paperIds = Array.from(selectedPaperIds);
+      for (let i = 0; i < paperIds.length; i++) {
+        await api.addWorldlinePaper(wl.id, paperIds[i], i);
+      }
+      setNewWlName('');
+      showNotification(`Created worldline "${wl.name}" with ${paperIds.length} papers`);
+      setSelectedPaperIds(new Set());
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to create worldline');
+    }
+  };
+
+  const handleDeleteWorldline = async (id: number) => {
+    try {
+      await api.deleteWorldline(id);
+      if (activeWorldlineId === id) setActiveWorldlineId(null);
+      showNotification('Worldline deleted');
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to delete worldline');
+    }
+  };
+
+  const handleAddPapersToWorldline = async (wlId: number) => {
+    try {
+      const wl = worldlines.find(w => w.id === wlId);
+      const existingCount = wl?.paperIds.size || 0;
+      const paperIds = Array.from(selectedPaperIds);
+      for (let i = 0; i < paperIds.length; i++) {
+        await api.addWorldlinePaper(wlId, paperIds[i], existingCount + i);
+      }
+      showNotification(`Added ${paperIds.length} papers to worldline`);
+      setSelectedPaperIds(new Set());
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to add papers');
+    }
+  };
+
+  const handleRemovePaperFromWorldline = async (wlId: number, paperId: number) => {
+    try {
+      await api.removeWorldlinePaper(wlId, paperId);
+      showNotification('Paper removed from worldline');
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to remove paper');
+    }
+  };
+
+  const handleSelectWorldlinePapers = (wl: WorldlineWithPapers) => {
+    setSelectedPaperIds(new Set(wl.paperIds));
+    setActiveWorldlineId(wl.id);
+  };
+
+  // Get short first author name
+  const getFirstAuthor = (p: SavedPaper): string => {
+    try {
+      const authors = JSON.parse(p.authors) as string[];
+      if (authors.length === 0) return 'Unknown';
+      const name = authors[0];
+      const parts = name.split(' ');
+      return parts[parts.length - 1] + (authors.length > 1 ? ' et al.' : '');
+    } catch {
+      return 'Unknown';
+    }
+  };
+
+  const getYear = (p: SavedPaper): string => {
+    return new Date(p.published).getFullYear().toString();
+  };
+
+  if (papers.length === 0) {
+    return (
+      <div className="worldline-panel">
+        <div className="empty-state">
+          No papers in library. Save papers from the Browse tab to visualize citation worldlines.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="worldline-panel">
+      {/* Visualization area */}
+      <div className="wl-main">
+        <div className="wl-chart" ref={containerRef}>
+          <svg ref={svgRef} />
+          {/* HTML tooltip — rendered outside SVG, pointer-events: none */}
+          {hoveredPaperId !== null && tooltipPos && (() => {
+            const hp = papers.find(p => p.id === hoveredPaperId);
+            if (!hp) return null;
+            const displayTitle = hp.title.length > 80 ? hp.title.substring(0, 77) + '...' : hp.title;
+            const dateStr = new Date(hp.published).toLocaleDateString();
+            const chartRect = containerRef.current?.getBoundingClientRect();
+            if (!chartRect) return null;
+            return (
+              <div
+                className="wl-tooltip"
+                style={{
+                  left: tooltipPos.x - chartRect.left,
+                  top: tooltipPos.y - chartRect.top - 45,
+                }}
+              >
+                <div className="wl-tooltip-title">{displayTitle}</div>
+                <div className="wl-tooltip-date">{getFirstAuthor(hp)} &middot; {dateStr}</div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Toggle sidebar */}
+        <button
+          className="sidebar-toggle"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title={sidebarOpen ? 'Hide panel' : 'Show panel'}
+        >
+          {sidebarOpen ? '\u25B6' : '\u25C0'}
+        </button>
+
+        {/* Sidebar */}
+        {sidebarOpen && (
+          <div className="wl-sidebar">
+            {/* Mode selector */}
+            <div className="wl-mode-bar">
+              <button
+                className={`btn btn-sm ${mode === 'select' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setMode('select'); setCiteSrcId(null); }}
+              >
+                Select
+              </button>
+              <button
+                className={`btn btn-sm ${mode === 'cite' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setMode('cite'); setCiteSrcId(null); }}
+                title="Click two papers to create a citation link"
+              >
+                Add Citation
+              </button>
+            </div>
+
+            {mode === 'cite' && (
+              <div className="wl-cite-hint">
+                {citeSrcId === null
+                  ? 'Click the citing paper first'
+                  : `Citing: "${papers.find(p => p.id === citeSrcId)?.title.substring(0, 30)}..." -- now click the cited paper`}
+              </div>
+            )}
+
+            {/* Selected papers */}
+            {mode === 'select' && (
+              <div className="wl-section">
+                <div className="wl-section-header">
+                  <h4>Selected ({selectedPaperIds.size})</h4>
+                  {selectedPaperIds.size > 0 && (
+                    <button className="btn-link" onClick={() => setSelectedPaperIds(new Set())}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {selectedPaperIds.size > 0 && (
+                  <div className="wl-selected-list">
+                    {Array.from(selectedPaperIds).map(id => {
+                      const p = papers.find(pp => pp.id === id);
+                      if (!p) return null;
+                      return (
+                        <div key={id} className="wl-selected-item">
+                          <span className="wl-selected-name" title={p.title}>
+                            {getFirstAuthor(p)} ({getYear(p)})
+                          </span>
+                          <button
+                            className="btn-icon btn-danger-icon"
+                            onClick={() => toggleSelection(id)}
+                            title="Deselect"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Create worldline from selection */}
+                {selectedPaperIds.size >= 1 && (
+                  <div className="wl-create-form">
+                    <input
+                      type="text"
+                      value={newWlName}
+                      onChange={e => setNewWlName(e.target.value)}
+                      placeholder="Worldline name..."
+                      onKeyDown={e => e.key === 'Enter' && handleCreateWorldline()}
+                    />
+                    <input
+                      type="color"
+                      value={newWlColor}
+                      onChange={e => setNewWlColor(e.target.value)}
+                    />
+                    <button
+                      className="btn btn-sm btn-success"
+                      onClick={handleCreateWorldline}
+                      disabled={!newWlName.trim()}
+                    >
+                      Create
+                    </button>
+                  </div>
+                )}
+
+                {/* Add to existing worldline */}
+                {selectedPaperIds.size > 0 && worldlines.length > 0 && (
+                  <div className="wl-add-to-existing">
+                    <span className="wl-label">Add to:</span>
+                    {worldlines.map(wl => (
+                      <button
+                        key={wl.id}
+                        className="btn btn-sm"
+                        style={{ background: wl.color, color: '#fff' }}
+                        onClick={() => handleAddPapersToWorldline(wl.id)}
+                        title={`Add selected papers to "${wl.name}"`}
+                      >
+                        {wl.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Worldlines list */}
+            <div className="wl-section">
+              <h4>Worldlines ({worldlines.length})</h4>
+              {worldlines.length === 0 && (
+                <p className="muted">Select papers and create a worldline to group them.</p>
+              )}
+              {worldlines.map(wl => (
+                <div
+                  key={wl.id}
+                  className={`wl-item ${activeWorldlineId === wl.id ? 'active' : ''}`}
+                >
+                  <div className="wl-item-header">
+                    <span
+                      className="wl-item-dot"
+                      style={{ background: wl.color }}
+                    />
+                    <span
+                      className="wl-item-name"
+                      onClick={() => handleSelectWorldlinePapers(wl)}
+                      title="Click to select this worldline's papers"
+                    >
+                      {wl.name}
+                    </span>
+                    <span className="wl-item-count">{wl.paperIds.size}</span>
+                    <button
+                      className="btn-icon btn-danger-icon"
+                      onClick={() => handleDeleteWorldline(wl.id)}
+                      title="Delete worldline"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  {activeWorldlineId === wl.id && (
+                    <div className="wl-item-papers">
+                      {Array.from(wl.paperIds).map(pid => {
+                        const p = papers.find(pp => pp.id === pid);
+                        if (!p) return null;
+                        return (
+                          <div key={pid} className="wl-item-paper">
+                            <span title={p.title}>
+                              {getFirstAuthor(p)} ({getYear(p)})
+                            </span>
+                            <button
+                              className="btn-icon btn-danger-icon"
+                              onClick={() => handleRemovePaperFromWorldline(wl.id, pid)}
+                              title="Remove from worldline"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Citations list */}
+            <div className="wl-section">
+              <h4>Citations ({citations.length})</h4>
+              {citations.length === 0 && (
+                <p className="muted">Switch to "Add Citation" mode and click two papers to link them.</p>
+              )}
+              <div className="wl-citation-list">
+                {citations.map(c => {
+                  const citing = papers.find(p => p.id === c.citing_paper_id);
+                  const cited = papers.find(p => p.id === c.cited_paper_id);
+                  if (!citing || !cited) return null;
+                  return (
+                    <div key={c.id} className="wl-citation-item">
+                      <span className="wl-citation-text">
+                        {getFirstAuthor(citing)} ({getYear(citing)})
+                        {' \u2192 '}
+                        {getFirstAuthor(cited)} ({getYear(cited)})
+                      </span>
+                      <button
+                        className="btn-icon btn-danger-icon"
+                        onClick={() => handleRemoveCitation(c.citing_paper_id, c.cited_paper_id)}
+                        title="Remove citation"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Paper list for reference */}
+            <div className="wl-section">
+              <h4>All Papers ({papers.length})</h4>
+              <div className="wl-paper-list">
+                {papers
+                  .slice()
+                  .sort((a, b) => new Date(a.published).getTime() - new Date(b.published).getTime())
+                  .map(p => {
+                    const isSelected = selectedPaperIds.has(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`wl-paper-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                          if (mode === 'cite') handleCiteClick(p.id);
+                          else toggleSelection(p.id);
+                        }}
+                        onMouseEnter={() => setHoveredPaperId(p.id)}
+                        onMouseLeave={() => setHoveredPaperId(null)}
+                      >
+                        <span className="wl-paper-title" title={p.title}>
+                          {p.title.length > 50 ? p.title.substring(0, 47) + '...' : p.title}
+                        </span>
+                        <span className="wl-paper-meta-small">
+                          {getFirstAuthor(p)} &middot; {getYear(p)}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
