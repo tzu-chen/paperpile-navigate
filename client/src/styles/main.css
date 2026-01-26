@@ -1976,6 +1976,28 @@ input[type="color"] {
   margin-bottom: 8px;
 }
 
+.wl-collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wl-collapsible-header:hover {
+  color: var(--text-primary);
+}
+
+.wl-collapse-chevron {
+  font-size: 8px;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.wl-collapse-chevron.open {
+  transform: rotate(90deg);
+}
+
 .wl-section-header {
   display: flex;
   justify-content: space-between;

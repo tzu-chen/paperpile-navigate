@@ -51,6 +51,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [importLoading, setImportLoading] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
+  // Collapsible sections
+  const [citationsOpen, setCitationsOpen] = useState(true);
+  const [allPapersOpen, setAllPapersOpen] = useState(true);
+
   const loadData = useCallback(async () => {
     try {
       const [cites, wls] = await Promise.all([
@@ -1109,65 +1113,83 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
 
             {/* Citations list */}
             <div className="wl-section">
-              <h4>Citations ({citations.length})</h4>
-              {citations.length === 0 && (
-                <p className="muted">Switch to "Add Citation" mode and click two papers to link them.</p>
+              <h4
+                className="wl-collapsible-header"
+                onClick={() => setCitationsOpen(prev => !prev)}
+              >
+                <span className={`wl-collapse-chevron ${citationsOpen ? 'open' : ''}`}>{'\u25B6'}</span>
+                Citations ({citations.length})
+              </h4>
+              {citationsOpen && (
+                <>
+                  {citations.length === 0 && (
+                    <p className="muted">Switch to "Add Citation" mode and click two papers to link them.</p>
+                  )}
+                  <div className="wl-citation-list">
+                    {citations.map(c => {
+                      const citing = papers.find(p => p.id === c.citing_paper_id);
+                      const cited = papers.find(p => p.id === c.cited_paper_id);
+                      if (!citing || !cited) return null;
+                      return (
+                        <div key={c.id} className="wl-citation-item">
+                          <span className="wl-citation-text">
+                            {getFirstAuthor(citing)} ({getYear(citing)})
+                            {' \u2192 '}
+                            {getFirstAuthor(cited)} ({getYear(cited)})
+                          </span>
+                          <button
+                            className="btn-icon btn-danger-icon"
+                            onClick={() => handleRemoveCitation(c.citing_paper_id, c.cited_paper_id)}
+                            title="Remove citation"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
-              <div className="wl-citation-list">
-                {citations.map(c => {
-                  const citing = papers.find(p => p.id === c.citing_paper_id);
-                  const cited = papers.find(p => p.id === c.cited_paper_id);
-                  if (!citing || !cited) return null;
-                  return (
-                    <div key={c.id} className="wl-citation-item">
-                      <span className="wl-citation-text">
-                        {getFirstAuthor(citing)} ({getYear(citing)})
-                        {' \u2192 '}
-                        {getFirstAuthor(cited)} ({getYear(cited)})
-                      </span>
-                      <button
-                        className="btn-icon btn-danger-icon"
-                        onClick={() => handleRemoveCitation(c.citing_paper_id, c.cited_paper_id)}
-                        title="Remove citation"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Paper list for reference */}
             <div className="wl-section">
-              <h4>All Papers ({papers.length})</h4>
-              <div className="wl-paper-list">
-                {papers
-                  .slice()
-                  .sort((a, b) => new Date(a.published).getTime() - new Date(b.published).getTime())
-                  .map(p => {
-                    const isSelected = selectedPaperIds.has(p.id);
-                    return (
-                      <div
-                        key={p.id}
-                        className={`wl-paper-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => {
-                          if (mode === 'cite') handleCiteClick(p.id);
-                          else toggleSelection(p.id);
-                        }}
-                        onMouseEnter={() => setHoveredPaperId(p.id)}
-                        onMouseLeave={() => setHoveredPaperId(null)}
-                      >
-                        <span className="wl-paper-title" title={p.title}>
-                          {p.title.length > 50 ? p.title.substring(0, 47) + '...' : p.title}
-                        </span>
-                        <span className="wl-paper-meta-small">
-                          {getFirstAuthor(p)} &middot; {getYear(p)}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
+              <h4
+                className="wl-collapsible-header"
+                onClick={() => setAllPapersOpen(prev => !prev)}
+              >
+                <span className={`wl-collapse-chevron ${allPapersOpen ? 'open' : ''}`}>{'\u25B6'}</span>
+                All Papers ({papers.length})
+              </h4>
+              {allPapersOpen && (
+                <div className="wl-paper-list">
+                  {papers
+                    .slice()
+                    .sort((a, b) => new Date(a.published).getTime() - new Date(b.published).getTime())
+                    .map(p => {
+                      const isSelected = selectedPaperIds.has(p.id);
+                      return (
+                        <div
+                          key={p.id}
+                          className={`wl-paper-item ${isSelected ? 'selected' : ''}`}
+                          onClick={() => {
+                            if (mode === 'cite') handleCiteClick(p.id);
+                            else toggleSelection(p.id);
+                          }}
+                          onMouseEnter={() => setHoveredPaperId(p.id)}
+                          onMouseLeave={() => setHoveredPaperId(null)}
+                        >
+                          <span className="wl-paper-title" title={p.title}>
+                            {p.title.length > 50 ? p.title.substring(0, 47) + '...' : p.title}
+                          </span>
+                          <span className="wl-paper-meta-small">
+                            {getFirstAuthor(p)} &middot; {getYear(p)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           </div>
         )}
