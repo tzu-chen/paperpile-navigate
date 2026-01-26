@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SavedPaper, Tag } from '../types';
 import * as api from '../services/api';
 
@@ -33,8 +33,22 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#6366f1');
   const [showTagManager, setShowTagManager] = useState(false);
+  const [taggedPaperIds, setTaggedPaperIds] = useState<Set<number> | null>(null);
+
+  useEffect(() => {
+    if (filterTag === null) {
+      setTaggedPaperIds(null);
+      return;
+    }
+    api.getSavedPapers({ tag_id: filterTag }).then(taggedPapers => {
+      setTaggedPaperIds(new Set(taggedPapers.map(p => p.id)));
+    }).catch(() => {
+      setTaggedPaperIds(null);
+    });
+  }, [filterTag, papers]);
 
   const filteredPapers = papers.filter(p => {
+    if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
     if (filterStatus && p.status !== filterStatus) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
