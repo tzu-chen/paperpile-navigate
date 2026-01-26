@@ -68,7 +68,12 @@ router.post('/', async (req: Request, res: Response) => {
       // Continue without PDF — fall back to metadata-only context
     }
 
-    const systemPrompt = `You are a research assistant helping analyze an academic paper.
+    // Build system prompt as content blocks with cache_control
+    // so Anthropic caches the system instructions across turns.
+    const systemContent = [
+      {
+        type: 'text' as const,
+        text: `You are a research assistant helping analyze an academic paper.
 
 Title: ${paperContext.title}
 Authors: ${paperContext.authors.join(', ')}
@@ -77,16 +82,20 @@ Categories: ${paperContext.categories.join(', ')}
 
 ${pdfBase64 ? 'The full PDF of the paper is attached to the first message.' : `Abstract:\n${paperContext.summary}\n\n(The PDF could not be loaded. Answer based on the abstract above.)`}
 
-Help the user understand the paper, answer questions about its methodology, results, and implications. Be concise and precise in your responses.`;
+Help the user understand the paper, answer questions about its methodology, results, and implications. Be concise and precise in your responses.`,
+        cache_control: { type: 'ephemeral' as const },
+      },
+    ];
 
     // Build the messages array for Claude, attaching the PDF document
-    // to the first user message as a content block.
+    // to the first user message with cache_control so Anthropic caches
+    // the (system + PDF) prefix across subsequent turns in a conversation.
     const claudeMessages: any[] = [];
     let pdfAttached = false;
 
     for (const msg of messages) {
       if (msg.role === 'user' && !pdfAttached && pdfBase64) {
-        // First user message: include PDF document + text
+        // First user message: include PDF document (cached) + text
         claudeMessages.push({
           role: 'user',
           content: [
@@ -97,6 +106,7 @@ Help the user understand the paper, answer questions about its methodology, resu
                 media_type: 'application/pdf',
                 data: pdfBase64,
               },
+              cache_control: { type: 'ephemeral' },
             },
             {
               type: 'text',
@@ -123,7 +133,7 @@ Help the user understand the paper, answer questions about its methodology, resu
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2048,
-        system: systemPrompt,
+        system: systemContent,
         messages: claudeMessages,
       }),
     });
