@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage } from '../types';
 
 const BASE = '/api';
 
@@ -191,4 +191,48 @@ export async function removeFavoriteAuthor(id: number): Promise<void> {
 
 export async function getFavoriteAuthorPublications(): Promise<{ papers: (ArxivPaper & { matchedAuthor: string })[] }> {
   return request('/authors/favorites/publications');
+}
+
+// Chat
+export async function sendChatMessage(
+  messages: ChatMessage[],
+  apiKey: string,
+  paperContext: {
+    title: string;
+    summary: string;
+    authors: string[];
+    categories: string[];
+    arxivId: string;
+  }
+): Promise<{ message: string }> {
+  return request('/chat', {
+    method: 'POST',
+    body: JSON.stringify({ messages, apiKey, paperContext }),
+  });
+}
+
+export async function verifyApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
+  return request('/chat/verify-key', {
+    method: 'POST',
+    body: JSON.stringify({ apiKey }),
+  });
+}
+
+// Settings (localStorage)
+const SETTINGS_KEY = 'paperpile-navigate-settings';
+
+export interface AppSettings {
+  claudeApiKey: string;
+}
+
+export function getSettings(): AppSettings {
+  try {
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return { claudeApiKey: '' };
+}
+
+export function saveSettings(settings: AppSettings): void {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }

@@ -7,6 +7,7 @@ import papersRoutes from './routes/papers';
 import tagsRoutes from './routes/tags';
 import exportRoutes from './routes/export';
 import authorsRoutes from './routes/authors';
+import chatRoutes from './routes/chat';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +22,7 @@ app.use('/api/papers', papersRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/authors', authorsRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Serve static frontend in production
 const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'dist');

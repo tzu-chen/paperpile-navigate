@@ -5,6 +5,7 @@ import PDFViewer from './PDFViewer';
 import CommentPanel from './CommentPanel';
 import TagPanel from './TagPanel';
 import ExportPanel from './ExportPanel';
+import ChatPanel from './ChatPanel';
 
 interface Props {
   paper: SavedPaper;
@@ -15,7 +16,7 @@ interface Props {
   onFavoriteAuthor: (name: string) => void;
 }
 
-type SidePanel = 'comments' | 'tags' | 'export' | 'info';
+type SidePanel = 'chat' | 'comments' | 'tags' | 'export' | 'info';
 
 export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -101,6 +102,12 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
         <div className="viewer-sidebar">
           <div className="sidebar-tabs">
             <button
+              className={`sidebar-tab ${activePanel === 'chat' ? 'active' : ''}`}
+              onClick={() => setActivePanel('chat')}
+            >
+              Chat
+            </button>
+            <button
               className={`sidebar-tab ${activePanel === 'comments' ? 'active' : ''}`}
               onClick={() => setActivePanel('comments')}
             >
@@ -126,7 +133,13 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
             </button>
           </div>
 
-          <div className="sidebar-content">
+          <div className={`sidebar-content ${activePanel === 'chat' ? 'sidebar-content-chat' : ''}`}>
+            {activePanel === 'chat' && (
+              <ChatPanel
+                paper={paper}
+                showNotification={showNotification}
+              />
+            )}
             {activePanel === 'comments' && (
               <CommentPanel
                 paperId={paper.id}

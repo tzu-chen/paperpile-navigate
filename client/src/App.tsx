@@ -5,6 +5,7 @@ import PaperBrowser from './components/PaperBrowser';
 import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
 import FavoriteAuthors from './components/FavoriteAuthors';
+import SettingsModal from './components/SettingsModal';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
@@ -13,6 +14,7 @@ export default function App() {
   const [favoriteAuthors, setFavoriteAuthors] = useState<FavoriteAuthor[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<SavedPaper | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const showNotification = useCallback((msg: string) => {
     setNotification(msg);
@@ -127,6 +129,15 @@ export default function App() {
             </button>
           )}
         </div>
+        <div className="header-right">
+          <button
+            className="settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+          >
+            &#9881;
+          </button>
+        </div>
       </header>
 
       {notification && (
@@ -175,6 +186,12 @@ export default function App() {
           />
         )}
       </main>
+
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        showNotification={showNotification}
+      />
     </div>
   );
 }
