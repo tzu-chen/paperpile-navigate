@@ -1,11 +1,104 @@
 import { Router, Request, Response } from 'express';
 import * as db from '../services/database';
+import { getArxivPaper } from '../services/arxiv';
 
 const router = Router();
 
 function paramInt(val: string | string[]): number {
   return parseInt(String(val), 10);
 }
+
+// --- Semantic Scholar ---
+
+const S2_API_BASE = 'https://api.semanticscholar.org/graph/v1/paper';
+const S2_FIELDS = 'title,authors,year,externalIds,url,abstract';
+
+// GET /api/worldlines/citations/discover/:arxivId — fetch citing & referenced papers from Semantic Scholar
+router.get('/citations/discover/:arxivId', async (req: Request, res: Response) => {
+  try {
+    const { arxivId } = req.params;
+    const paperId = `ARXIV:${arxivId}`;
+
+    const [citationsRes, referencesRes] = await Promise.all([
+      fetch(`${S2_API_BASE}/${paperId}/citations?fields=${S2_FIELDS}&limit=50`),
+      fetch(`${S2_API_BASE}/${paperId}/references?fields=${S2_FIELDS}&limit=50`),
+    ]);
+
+    if (!citationsRes.ok && !referencesRes.ok) {
+      return res.status(502).json({ error: 'Semantic Scholar API unavailable' });
+    }
+
+    const citationsData: any = citationsRes.ok ? await citationsRes.json() : { data: [] };
+    const referencesData: any = referencesRes.ok ? await referencesRes.json() : { data: [] };
+
+    // Normalize the data: citations returns {citingPaper}, references returns {citedPaper}
+    const citations = (citationsData.data || [])
+      .map((item: any) => item.citingPaper)
+      .filter((p: any) => p && p.title);
+
+    const references = (referencesData.data || [])
+      .map((item: any) => item.citedPaper)
+      .filter((p: any) => p && p.title);
+
+    res.json({ citations, references });
+  } catch (error) {
+    console.error('Semantic Scholar fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch from Semantic Scholar' });
+  }
+});
+
+// POST /api/worldlines/citations/import — save a paper by arxiv ID and create citation link
+router.post('/citations/import', async (req: Request, res: Response) => {
+  try {
+    const { arxiv_id, source_paper_id, direction } = req.body;
+    // direction: 'cites' means source paper cites the imported paper
+    //            'cited_by' means imported paper cites the source paper
+
+    if (!arxiv_id || !source_paper_id || !direction) {
+      return res.status(400).json({ error: 'arxiv_id, source_paper_id, and direction are required' });
+    }
+
+    // Check if paper already exists in library
+    let paper = db.getPaperByArxivId(arxiv_id) as any;
+
+    if (!paper) {
+      // Fetch paper details from ArXiv
+      const arxivPaper = await getArxivPaper(arxiv_id);
+      if (!arxivPaper) {
+        return res.status(404).json({ error: 'Paper not found on ArXiv' });
+      }
+
+      const result = db.savePaper({
+        arxiv_id: arxivPaper.id,
+        title: arxivPaper.title,
+        summary: arxivPaper.summary,
+        authors: JSON.stringify(arxivPaper.authors),
+        published: arxivPaper.published,
+        updated: arxivPaper.updated,
+        categories: JSON.stringify(arxivPaper.categories),
+        pdf_url: arxivPaper.pdfUrl,
+        abs_url: arxivPaper.absUrl,
+        doi: arxivPaper.doi,
+        journal_ref: arxivPaper.journalRef,
+      });
+      paper = db.getPaper(result.lastInsertRowid as number);
+    }
+
+    // Create citation link
+    if (direction === 'cites') {
+      // source paper cites the imported paper
+      db.addCitation(source_paper_id, paper.id);
+    } else {
+      // imported paper cites the source paper (imported paper is the citing paper)
+      db.addCitation(paper.id, source_paper_id);
+    }
+
+    res.status(201).json({ paper, success: true });
+  } catch (error) {
+    console.error('Import citation error:', error);
+    res.status(500).json({ error: 'Failed to import paper and create citation' });
+  }
+});
 
 // --- Citations ---
 
