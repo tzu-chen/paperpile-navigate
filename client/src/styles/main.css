@@ -641,6 +641,28 @@ input[type="color"] {
   min-width: 0;
 }
 
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  background: var(--bg-secondary);
+  border: none;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: all var(--transition);
+  padding: 0;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .viewer-sidebar {
   width: 360px;
   border-left: 1px solid var(--border-color);
@@ -705,19 +727,6 @@ input[type="color"] {
   flex-shrink: 0;
 }
 
-.pdf-page-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.page-input {
-  width: 60px;
-  text-align: center;
-}
-
 .pdf-frame {
   flex: 1;
   width: 100%;
@@ -752,6 +761,21 @@ input[type="color"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.comment-page-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.comment-page-input {
+  width: 50px;
+  text-align: center;
+  padding: 3px 6px;
+  font-size: 12px;
 }
 
 .comment-list {
