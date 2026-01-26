@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline, SemanticScholarResult } from '../types';
 
 const BASE = '/api';
 
@@ -273,6 +273,22 @@ export async function addWorldlinePaper(worldlineId: number, paperId: number, po
 
 export async function removeWorldlinePaper(worldlineId: number, paperId: number): Promise<void> {
   await request(`/worldlines/${worldlineId}/papers/${paperId}`, { method: 'DELETE' });
+}
+
+// Semantic Scholar Discovery
+export async function discoverCitations(arxivId: string): Promise<SemanticScholarResult> {
+  return request(`/worldlines/citations/discover/${encodeURIComponent(arxivId)}`);
+}
+
+export async function importCitedPaper(
+  arxivId: string,
+  sourcePaperId: number,
+  direction: 'cites' | 'cited_by'
+): Promise<{ paper: SavedPaper; success: boolean }> {
+  return request('/worldlines/citations/import', {
+    method: 'POST',
+    body: JSON.stringify({ arxiv_id: arxivId, source_paper_id: sourcePaperId, direction }),
+  });
 }
 
 // Settings (localStorage)

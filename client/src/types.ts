@@ -83,4 +83,19 @@ export interface Worldline {
   created_at: string;
 }
 
+export interface SemanticScholarPaper {
+  paperId: string;
+  title: string;
+  abstract?: string;
+  year?: number;
+  authors?: { authorId: string; name: string }[];
+  externalIds?: { ArXiv?: string; DOI?: string; [key: string]: string | undefined };
+  url?: string;
+}
+
+export interface SemanticScholarResult {
+  citations: SemanticScholarPaper[];
+  references: SemanticScholarPaper[];
+}
+
 export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory' | 'worldline';

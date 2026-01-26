@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
-import { SavedPaper, Citation, Worldline } from '../types';
+import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult } from '../types';
 import * as api from '../services/api';
 
 interface Props {
@@ -33,6 +33,13 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
 
   // Sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Semantic Scholar citations discovery
+  const [discoveryResult, setDiscoveryResult] = useState<SemanticScholarResult | null>(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryPaperId, setDiscoveryPaperId] = useState<number | null>(null);
+  const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
+  const [discoveryTab, setDiscoveryTab] = useState<'citations' | 'references'>('citations');
 
   const loadData = useCallback(async () => {
     try {
@@ -557,6 +564,65 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
     setActiveWorldlineId(wl.id);
   };
 
+  // Discover citations from Semantic Scholar
+  const handleDiscoverCitations = async (paperId: number) => {
+    const paper = papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    setDiscoveryLoading(true);
+    setDiscoveryPaperId(paperId);
+    setDiscoveryResult(null);
+
+    try {
+      const result = await api.discoverCitations(paper.arxiv_id);
+      setDiscoveryResult(result);
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to discover citations');
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  };
+
+  // Import a paper from Semantic Scholar results
+  const handleImportPaper = async (
+    s2Paper: SemanticScholarPaper,
+    direction: 'cites' | 'cited_by'
+  ) => {
+    const arxivId = s2Paper.externalIds?.ArXiv;
+    if (!arxivId || !discoveryPaperId) return;
+
+    setImportingIds(prev => new Set(prev).add(arxivId));
+    try {
+      await api.importCitedPaper(arxivId, discoveryPaperId, direction);
+      showNotification(`Added "${s2Paper.title.substring(0, 40)}..." to library with citation`);
+      await onRefresh();
+      await loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to import paper');
+    } finally {
+      setImportingIds(prev => {
+        const next = new Set(prev);
+        next.delete(arxivId);
+        return next;
+      });
+    }
+  };
+
+  // Clear discovery when selection changes
+  useEffect(() => {
+    if (selectedPaperIds.size !== 1) {
+      setDiscoveryResult(null);
+      setDiscoveryPaperId(null);
+    }
+  }, [selectedPaperIds]);
+
+  // Check if a Semantic Scholar paper is already in our library
+  const isInLibrary = useCallback((s2Paper: SemanticScholarPaper): boolean => {
+    const arxivId = s2Paper.externalIds?.ArXiv;
+    if (!arxivId) return false;
+    return papers.some(p => p.arxiv_id === arxivId);
+  }, [papers]);
+
   // Get short first author name
   const getFirstAuthor = (p: SavedPaper): string => {
     try {
@@ -728,6 +794,95 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                 )}
               </div>
             )}
+
+            {/* Citations Discovery Panel */}
+            {selectedPaperIds.size === 1 && (() => {
+              const selectedId = Array.from(selectedPaperIds)[0];
+              const selectedPaper = papers.find(p => p.id === selectedId);
+              if (!selectedPaper) return null;
+
+              return (
+                <div className="wl-section wl-discover-section">
+                  <div className="wl-section-header">
+                    <h4>Discover Citations</h4>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handleDiscoverCitations(selectedId)}
+                      disabled={discoveryLoading}
+                    >
+                      {discoveryLoading ? 'Loading...' : discoveryPaperId === selectedId && discoveryResult ? 'Refresh' : 'Fetch'}
+                    </button>
+                  </div>
+                  <div className="wl-discover-paper-name" title={selectedPaper.title}>
+                    {selectedPaper.title.length > 60 ? selectedPaper.title.substring(0, 57) + '...' : selectedPaper.title}
+                  </div>
+
+                  {discoveryLoading && (
+                    <div className="wl-discover-loading">Querying Semantic Scholar...</div>
+                  )}
+
+                  {discoveryResult && discoveryPaperId === selectedId && (
+                    <>
+                      <div className="wl-discover-tabs">
+                        <button
+                          className={`btn btn-sm ${discoveryTab === 'citations' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setDiscoveryTab('citations')}
+                        >
+                          Cited by ({discoveryResult.citations.length})
+                        </button>
+                        <button
+                          className={`btn btn-sm ${discoveryTab === 'references' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setDiscoveryTab('references')}
+                        >
+                          References ({discoveryResult.references.length})
+                        </button>
+                      </div>
+
+                      <div className="wl-discover-list">
+                        {(discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references)
+                          .map((s2p, idx) => {
+                            const arxivId = s2p.externalIds?.ArXiv;
+                            const inLib = isInLibrary(s2p);
+                            const importing = arxivId ? importingIds.has(arxivId) : false;
+                            const authorStr = s2p.authors?.slice(0, 2).map(a => a.name).join(', ') || 'Unknown';
+                            const direction = discoveryTab === 'citations' ? 'cited_by' as const : 'cites' as const;
+
+                            return (
+                              <div key={s2p.paperId || idx} className="wl-discover-item">
+                                <div className="wl-discover-item-info">
+                                  <span className="wl-discover-item-title" title={s2p.title}>
+                                    {s2p.title.length > 55 ? s2p.title.substring(0, 52) + '...' : s2p.title}
+                                  </span>
+                                  <span className="wl-discover-item-meta">
+                                    {authorStr}{s2p.year ? ` (${s2p.year})` : ''}
+                                    {arxivId ? ' · arXiv' : ''}
+                                  </span>
+                                </div>
+                                {arxivId && !inLib && (
+                                  <button
+                                    className="btn btn-sm btn-success wl-discover-import-btn"
+                                    onClick={() => handleImportPaper(s2p, direction)}
+                                    disabled={importing}
+                                    title="Add to library with citation link"
+                                  >
+                                    {importing ? '...' : '+'}
+                                  </button>
+                                )}
+                                {inLib && (
+                                  <span className="wl-discover-in-lib" title="Already in library">✓</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        {(discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references).length === 0 && (
+                          <p className="muted">No {discoveryTab} found.</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Worldlines list */}
             <div className="wl-section">
