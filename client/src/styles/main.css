@@ -1522,3 +1522,221 @@ input[type="color"] {
 .markdown-body em {
   font-style: italic;
 }
+
+/* ========================
+   Chat Session Bar (in ChatPanel)
+   ======================== */
+.chat-session-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}
+
+.chat-session-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.chat-session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  transition: background var(--transition);
+}
+
+.chat-session-item:last-child {
+  border-bottom: none;
+}
+
+.chat-session-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.chat-session-item.active {
+  background: rgba(99, 102, 241, 0.1);
+  border-left: 3px solid var(--accent);
+}
+
+.chat-session-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-session-preview {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-session-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-session-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+
+.chat-session-delete:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ========================
+   Chat History View (standalone page)
+   ======================== */
+.chat-history {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.chat-history-header {
+  margin-bottom: 16px;
+}
+
+.chat-history-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chat-history-search {
+  margin-bottom: 20px;
+}
+
+.chat-history-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 48px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chat-history-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.chat-history-group {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.chat-history-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-history-group-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-history-group-title h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  line-height: 1.4;
+}
+
+.chat-history-group-title .text-muted {
+  font-size: 12px;
+}
+
+.chat-history-group-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chat-history-sessions {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-history-session {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.chat-history-session:last-child {
+  border-bottom: none;
+}
+
+.chat-history-session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.chat-history-session-header:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.chat-history-session-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-history-session-preview {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.chat-history-session-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-left: 18px;
+}
+
+.chat-history-session-messages {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}

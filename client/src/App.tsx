@@ -5,6 +5,7 @@ import PaperBrowser from './components/PaperBrowser';
 import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
 import FavoriteAuthors from './components/FavoriteAuthors';
+import ChatHistory from './components/ChatHistory';
 import SettingsModal from './components/SettingsModal';
 
 export default function App() {
@@ -121,6 +122,12 @@ export default function App() {
               >
                 Favorite Authors ({favoriteAuthors.length})
               </button>
+              <button
+                className={`nav-tab ${viewMode === 'chatHistory' ? 'active' : ''}`}
+                onClick={() => setViewMode('chatHistory')}
+              >
+                Chat History
+              </button>
             </nav>
           )}
           {viewMode === 'viewer' && (
@@ -172,6 +179,13 @@ export default function App() {
             onSavePaper={handleSavePaper}
             onOpenPaper={handleOpenArxivPaper}
             savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
+            showNotification={showNotification}
+          />
+        )}
+        {viewMode === 'chatHistory' && (
+          <ChatHistory
+            savedPapers={savedPapers}
+            onOpenPaper={handleOpenPaper}
             showNotification={showNotification}
           />
         )}
