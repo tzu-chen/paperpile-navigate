@@ -23,6 +23,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>('comments');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const authors = JSON.parse(paper.authors) as string[];
   const categories = JSON.parse(paper.categories) as string[];
@@ -95,11 +96,18 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
         <div className="viewer-pdf">
           <PDFViewer
             pdfUrl={api.getPdfProxyUrl(paper.arxiv_id)}
-            onPageChange={setCurrentPage}
           />
         </div>
 
-        <div className="viewer-sidebar">
+        <button
+          className="sidebar-toggle"
+          onClick={() => setSidebarVisible(v => !v)}
+          title={sidebarVisible ? 'Hide panel' : 'Show panel'}
+        >
+          {sidebarVisible ? '\u25B6' : '\u25C0'}
+        </button>
+
+        {sidebarVisible && <div className="viewer-sidebar">
           <div className="sidebar-tabs">
             <button
               className={`sidebar-tab ${activePanel === 'chat' ? 'active' : ''}`}
@@ -145,6 +153,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 paperId={paper.id}
                 comments={comments}
                 currentPage={currentPage}
+                onPageChange={setCurrentPage}
                 onRefresh={loadComments}
                 showNotification={showNotification}
               />
@@ -218,7 +227,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
               </div>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

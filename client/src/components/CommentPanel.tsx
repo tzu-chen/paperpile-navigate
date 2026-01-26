@@ -6,13 +6,13 @@ interface Props {
   paperId: number;
   comments: Comment[];
   currentPage: number;
+  onPageChange: (page: number) => void;
   onRefresh: () => Promise<void>;
   showNotification: (msg: string) => void;
 }
 
-export default function CommentPanel({ paperId, comments, currentPage, onRefresh, showNotification }: Props) {
+export default function CommentPanel({ paperId, comments, currentPage, onPageChange, onRefresh, showNotification }: Props) {
   const [newComment, setNewComment] = useState('');
-  const [attachPage, setAttachPage] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,7 +24,7 @@ export default function CommentPanel({ paperId, comments, currentPage, onRefresh
       await api.addComment(
         paperId,
         newComment.trim(),
-        attachPage ? currentPage : undefined
+        currentPage
       );
       setNewComment('');
       await onRefresh();
@@ -78,13 +78,18 @@ export default function CommentPanel({ paperId, comments, currentPage, onRefresh
           }}
         />
         <div className="comment-input-controls">
-          <label className="checkbox-label">
+          <label className="comment-page-label">
+            Page
             <input
-              type="checkbox"
-              checked={attachPage}
-              onChange={e => setAttachPage(e.target.checked)}
+              type="number"
+              min="1"
+              value={currentPage}
+              onChange={e => {
+                const num = parseInt(e.target.value, 10);
+                if (!isNaN(num) && num > 0) onPageChange(num);
+              }}
+              className="comment-page-input"
             />
-            Attach to page {currentPage}
           </label>
           <button
             className="btn btn-primary btn-sm"
