@@ -110,7 +110,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   // Get active worldline
   const activeWorldline = worldlines.find(w => w.id === activeWorldlineId) || null;
 
-  // D3 rendering
+  // Track tooltip position in page coordinates
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+
+  // D3 rendering — builds the full SVG. Does NOT depend on hoveredPaperId
+  // so hovering never causes a full re-render.
   useEffect(() => {
     if (!svgRef.current || !containerRef.current || papers.length === 0) return;
 
@@ -204,13 +208,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         .text(cat);
     });
 
-    // Build sets for quick lookups
-    const worldlinePaperSets = new Map<number, Set<number>>();
-    worldlines.forEach(wl => {
-      worldlinePaperSets.set(wl.id, wl.paperIds);
-    });
-
-    // Draw citation edges
+    // Draw citation edges — always visible with persistent styling
     const citationLines = chartArea.append('g').attr('class', 'citation-lines');
 
     citations.forEach(c => {
@@ -219,9 +217,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       if (!srcPos || !tgtPos) return;
 
       // Check if this edge belongs to any worldline
-      let edgeColor = 'var(--border-color)';
-      let edgeWidth = 1;
-      let edgeOpacity = 0.4;
+      let edgeColor = 'var(--text-muted)';
+      let edgeWidth = 1.5;
+      let edgeOpacity = 0.5;
 
       worldlines.forEach(wl => {
         if (wl.paperIds.has(c.citing_paper_id) && wl.paperIds.has(c.cited_paper_id)) {
@@ -231,15 +229,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         }
       });
 
-      // Highlight if hovered paper is involved
-      if (hoveredPaperId !== null &&
-        (c.citing_paper_id === hoveredPaperId || c.cited_paper_id === hoveredPaperId)) {
-        edgeColor = 'var(--accent-hover)';
-        edgeWidth = 2.5;
-        edgeOpacity = 1;
-      }
-
-      citationLines.append('line')
+      const lineEl = citationLines.append('line')
         .attr('x1', xScale(srcPos.x))
         .attr('y1', yScale(srcPos.y))
         .attr('x2', xScale(tgtPos.x))
@@ -247,9 +237,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         .attr('stroke', edgeColor)
         .attr('stroke-width', edgeWidth)
         .attr('stroke-opacity', edgeOpacity)
-        .attr('stroke-dasharray', edgeWidth < 2 ? '4,3' : 'none');
+        .attr('data-citing', c.citing_paper_id)
+        .attr('data-cited', c.cited_paper_id);
 
-      // Arrow head pointing from citing to cited (towards cited)
+      // Arrow head pointing from citing to cited
       const dx = xScale(tgtPos.x) - xScale(srcPos.x);
       const dy = yScale(tgtPos.y) - yScale(srcPos.y);
       const len = Math.sqrt(dx * dx + dy * dy);
@@ -267,7 +258,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
             [midX + uy * arrowSize * 0.5, midY - ux * arrowSize * 0.5],
           ].map(p => p.join(',')).join(' '))
           .attr('fill', edgeColor)
-          .attr('opacity', edgeOpacity);
+          .attr('opacity', edgeOpacity)
+          .attr('data-citing', c.citing_paper_id)
+          .attr('data-cited', c.cited_paper_id);
       }
     });
 
@@ -330,12 +323,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         radius = 8;
       }
 
-      const isHovered = hoveredPaperId === p.id;
-      if (isHovered) {
-        radius += 2;
-        strokeWidth += 1;
-      }
-
       const isCiteSrc = citeSrcId === p.id;
       if (isCiteSrc) {
         strokeColor = 'var(--warning)';
@@ -351,15 +338,80 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         .attr('stroke', strokeColor)
         .attr('stroke-width', strokeWidth)
         .attr('cursor', 'pointer')
-        .attr('data-paper-id', p.id);
+        .attr('data-paper-id', p.id)
+        // Store base values for hover restore
+        .attr('data-base-r', radius)
+        .attr('data-base-sw', strokeWidth);
 
-      // Hover handlers
-      node.on('mouseenter', () => {
+      // Hover handlers — update node directly via D3, plus set React state
+      // for the HTML tooltip. No full re-render.
+      node.on('mouseenter', function (event: MouseEvent) {
+        const el = d3.select(this);
+        const baseR = +el.attr('data-base-r');
+        const baseSW = +el.attr('data-base-sw');
+        el.attr('r', baseR + 2).attr('stroke-width', baseSW + 1);
+
+        // Highlight connected citation edges
+        svg.selectAll('.citation-lines line').each(function () {
+          const line = d3.select(this);
+          if (+line.attr('data-citing') === p.id || +line.attr('data-cited') === p.id) {
+            line.attr('stroke', 'var(--accent-hover)')
+              .attr('stroke-width', 3)
+              .attr('stroke-opacity', 1);
+          }
+        });
+        svg.selectAll('.citation-lines polygon').each(function () {
+          const poly = d3.select(this);
+          if (+poly.attr('data-citing') === p.id || +poly.attr('data-cited') === p.id) {
+            poly.attr('fill', 'var(--accent-hover)')
+              .attr('opacity', 1);
+          }
+        });
+
         setHoveredPaperId(p.id);
+        setTooltipPos({ x: event.clientX, y: event.clientY });
       });
 
-      node.on('mouseleave', () => {
+      node.on('mousemove', function (event: MouseEvent) {
+        setTooltipPos({ x: event.clientX, y: event.clientY });
+      });
+
+      node.on('mouseleave', function () {
+        const el = d3.select(this);
+        el.attr('r', el.attr('data-base-r'))
+          .attr('stroke-width', el.attr('data-base-sw'));
+
+        // Restore citation edges to their base style
+        svg.selectAll('.citation-lines line').each(function () {
+          const line = d3.select(this);
+          const citing = +line.attr('data-citing');
+          const cited = +line.attr('data-cited');
+          let color = 'var(--text-muted)';
+          let w = 1.5;
+          let op = 0.5;
+          worldlines.forEach(wl => {
+            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
+              color = wl.color; w = 2.5; op = 0.85;
+            }
+          });
+          line.attr('stroke', color).attr('stroke-width', w).attr('stroke-opacity', op);
+        });
+        svg.selectAll('.citation-lines polygon').each(function () {
+          const poly = d3.select(this);
+          const citing = +poly.attr('data-citing');
+          const cited = +poly.attr('data-cited');
+          let color = 'var(--text-muted)';
+          let op = 0.5;
+          worldlines.forEach(wl => {
+            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
+              color = wl.color; op = 0.85;
+            }
+          });
+          poly.attr('fill', color).attr('opacity', op);
+        });
+
         setHoveredPaperId(null);
+        setTooltipPos(null);
       });
 
       node.on('click', (event: MouseEvent) => {
@@ -371,48 +423,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         }
       });
     });
-
-    // Tooltip for hovered paper
-    if (hoveredPaperId !== null) {
-      const hp = papers.find(p => p.id === hoveredPaperId);
-      const pos = hp ? paperPositions.get(hp.id) : null;
-      if (hp && pos) {
-        const tooltipG = chartArea.append('g').attr('class', 'tooltip-group');
-        const ttX = xScale(pos.x);
-        const ttY = yScale(pos.y) - 15;
-
-        // Shorten title
-        const displayTitle = hp.title.length > 60 ? hp.title.substring(0, 57) + '...' : hp.title;
-        const dateStr = new Date(hp.published).toLocaleDateString();
-
-        const text = tooltipG.append('text')
-          .attr('x', ttX)
-          .attr('y', ttY)
-          .attr('text-anchor', 'middle')
-          .attr('fill', 'var(--text-primary)')
-          .attr('font-size', '11px')
-          .attr('font-weight', '500');
-
-        text.append('tspan').text(displayTitle);
-        text.append('tspan')
-          .attr('x', ttX)
-          .attr('dy', '14')
-          .attr('fill', 'var(--text-muted)')
-          .attr('font-size', '10px')
-          .text(dateStr);
-
-        // Background for tooltip
-        const bbox = (text.node() as SVGTextElement).getBBox();
-        tooltipG.insert('rect', 'text')
-          .attr('x', bbox.x - 6)
-          .attr('y', bbox.y - 4)
-          .attr('width', bbox.width + 12)
-          .attr('height', bbox.height + 8)
-          .attr('fill', 'var(--bg-secondary)')
-          .attr('stroke', 'var(--border-color)')
-          .attr('rx', 4);
-      }
-    }
 
     // Axis styling
     svg.selectAll('.wl-axis text')
@@ -431,7 +441,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, hoveredPaperId, mode, citeSrcId]);
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, mode, citeSrcId]);
 
   // Resize handler
   useEffect(() => {
@@ -580,6 +590,27 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       <div className="wl-main">
         <div className="wl-chart" ref={containerRef}>
           <svg ref={svgRef} />
+          {/* HTML tooltip — rendered outside SVG, pointer-events: none */}
+          {hoveredPaperId !== null && tooltipPos && (() => {
+            const hp = papers.find(p => p.id === hoveredPaperId);
+            if (!hp) return null;
+            const displayTitle = hp.title.length > 80 ? hp.title.substring(0, 77) + '...' : hp.title;
+            const dateStr = new Date(hp.published).toLocaleDateString();
+            const chartRect = containerRef.current?.getBoundingClientRect();
+            if (!chartRect) return null;
+            return (
+              <div
+                className="wl-tooltip"
+                style={{
+                  left: tooltipPos.x - chartRect.left,
+                  top: tooltipPos.y - chartRect.top - 45,
+                }}
+              >
+                <div className="wl-tooltip-title">{displayTitle}</div>
+                <div className="wl-tooltip-date">{getFirstAuthor(hp)} &middot; {dateStr}</div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Toggle sidebar */}
