@@ -8,6 +8,7 @@ import PaperViewer from './components/PaperViewer';
 import FavoriteAuthors from './components/FavoriteAuthors';
 import ChatHistory from './components/ChatHistory';
 import SettingsModal from './components/SettingsModal';
+import ArxivRefreshTimer from './components/ArxivRefreshTimer';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
@@ -146,6 +147,7 @@ export default function App() {
           )}
         </div>
         <div className="header-right">
+          <ArxivRefreshTimer />
           <button
             className="settings-btn"
             onClick={() => setSettingsOpen(true)}

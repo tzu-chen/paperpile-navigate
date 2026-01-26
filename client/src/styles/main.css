@@ -1125,6 +1125,44 @@ input[type="color"] {
 }
 
 /* ========================
+   ArXiv Refresh Timer
+   ======================== */
+.arxiv-refresh-timer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  margin-right: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-mono, 'SF Mono', 'Fira Code', 'Fira Mono', monospace);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.arxiv-refresh-icon {
+  font-size: 14px;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.arxiv-refresh-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.arxiv-refresh-countdown {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========================
    Settings Modal
    ======================== */
 .settings-overlay {
