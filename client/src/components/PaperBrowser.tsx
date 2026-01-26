@@ -18,7 +18,9 @@ const SORT_OPTIONS = [
 
 export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('cs.AI');
+  const [selectedCategory, setSelectedCategory] = useState(
+    () => localStorage.getItem('paperpile-navigate-category') || 'cs.AI'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('submittedDate');
   const [papers, setPapers] = useState<ArxivPaper[]>([]);
@@ -90,7 +92,11 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
             <label>Category</label>
             <select
               value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                setSelectedCategory(val);
+                localStorage.setItem('paperpile-navigate-category', val);
+              }}
             >
               {categoryGroups.map(group => (
                 <optgroup key={group.label} label={group.label}>
