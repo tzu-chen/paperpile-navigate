@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArxivPaper, SavedPaper, Tag, FavoriteAuthor, ViewMode } from './types';
 import * as api from './services/api';
+import { getSchemeById, applyColorScheme } from './colorSchemes';
 import PaperBrowser from './components/PaperBrowser';
 import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
@@ -48,6 +49,14 @@ export default function App() {
     loadLibrary();
     loadFavoriteAuthors();
   }, [loadLibrary, loadFavoriteAuthors]);
+
+  useEffect(() => {
+    const settings = api.getSettings();
+    const scheme = getSchemeById(settings.colorScheme);
+    if (scheme) {
+      applyColorScheme(scheme);
+    }
+  }, []);
 
   const favoriteAuthorNames = new Set(favoriteAuthors.map(a => a.name));
 

@@ -223,14 +223,15 @@ const SETTINGS_KEY = 'paperpile-navigate-settings';
 
 export interface AppSettings {
   claudeApiKey: string;
+  colorScheme: string;
 }
 
 export function getSettings(): AppSettings {
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) return { colorScheme: 'default-dark', ...JSON.parse(stored) };
   } catch {}
-  return { claudeApiKey: '' };
+  return { claudeApiKey: '', colorScheme: 'default-dark' };
 }
 
 export function saveSettings(settings: AppSettings): void {
