@@ -60,4 +60,13 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer';
+export interface ChatSession {
+  id: string;
+  arxivId: string;
+  paperTitle: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory';

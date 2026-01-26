@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession } from '../types';
 
 const BASE = '/api';
 
@@ -235,4 +235,56 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+// Chat History (localStorage)
+const CHAT_HISTORY_KEY = 'paperpile-navigate-chat-history';
+
+function loadAllSessions(): ChatSession[] {
+  try {
+    const stored = localStorage.getItem(CHAT_HISTORY_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [];
+}
+
+function persistAllSessions(sessions: ChatSession[]): void {
+  localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(sessions));
+}
+
+export function getAllChatSessions(): ChatSession[] {
+  return loadAllSessions().sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
+export function getChatSessionsForPaper(arxivId: string): ChatSession[] {
+  return loadAllSessions()
+    .filter(s => s.arxivId === arxivId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+export function getChatSession(sessionId: string): ChatSession | undefined {
+  return loadAllSessions().find(s => s.id === sessionId);
+}
+
+export function saveChatSession(session: ChatSession): void {
+  const sessions = loadAllSessions();
+  const idx = sessions.findIndex(s => s.id === session.id);
+  if (idx >= 0) {
+    sessions[idx] = session;
+  } else {
+    sessions.push(session);
+  }
+  persistAllSessions(sessions);
+}
+
+export function deleteChatSession(sessionId: string): void {
+  const sessions = loadAllSessions().filter(s => s.id !== sessionId);
+  persistAllSessions(sessions);
+}
+
+export function deleteAllChatSessionsForPaper(arxivId: string): void {
+  const sessions = loadAllSessions().filter(s => s.arxivId !== arxivId);
+  persistAllSessions(sessions);
 }
