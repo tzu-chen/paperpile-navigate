@@ -100,6 +100,119 @@ router.post('/citations/import', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/worldlines/batch-import — batch import papers, infer citations, create worldline
+router.post('/batch-import', async (req: Request, res: Response) => {
+  try {
+    const { arxiv_ids, worldline_name, worldline_color } = req.body;
+
+    if (!arxiv_ids || !Array.isArray(arxiv_ids) || arxiv_ids.length === 0) {
+      return res.status(400).json({ error: 'arxiv_ids array is required' });
+    }
+    if (!worldline_name || !worldline_name.trim()) {
+      return res.status(400).json({ error: 'worldline_name is required' });
+    }
+
+    // Normalize IDs: strip version suffixes (e.g. "2301.00001v1" -> "2301.00001")
+    const cleanIds = arxiv_ids
+      .map((id: string) => id.trim())
+      .filter((id: string) => id.length > 0)
+      .map((id: string) => id.replace(/v\d+$/, ''));
+
+    const uniqueIds = [...new Set(cleanIds)] as string[];
+
+    // Step 1: Save all papers to library
+    const paperMap = new Map<string, number>(); // arxiv_id -> paper.id
+    const savedPapers: any[] = [];
+    const errors: string[] = [];
+
+    for (const arxivId of uniqueIds) {
+      let paper = db.getPaperByArxivId(arxivId) as any;
+      if (!paper) {
+        try {
+          const arxivPaper = await getArxivPaper(arxivId);
+          if (!arxivPaper) {
+            errors.push(`Not found: ${arxivId}`);
+            continue;
+          }
+          const result = db.savePaper({
+            arxiv_id: arxivPaper.id,
+            title: arxivPaper.title,
+            summary: arxivPaper.summary,
+            authors: JSON.stringify(arxivPaper.authors),
+            published: arxivPaper.published,
+            updated: arxivPaper.updated,
+            categories: JSON.stringify(arxivPaper.categories),
+            pdf_url: arxivPaper.pdfUrl,
+            abs_url: arxivPaper.absUrl,
+            doi: arxivPaper.doi,
+            journal_ref: arxivPaper.journalRef,
+          });
+          paper = db.getPaper(result.lastInsertRowid as number);
+        } catch (err) {
+          errors.push(`Failed to fetch: ${arxivId}`);
+          continue;
+        }
+      }
+      paperMap.set(arxivId, paper.id);
+      savedPapers.push(paper);
+    }
+
+    // Step 2: Infer citations via Semantic Scholar
+    let citationsCreated = 0;
+    const batchArxivIds = new Set(paperMap.keys());
+
+    for (const arxivId of batchArxivIds) {
+      const paperId = paperMap.get(arxivId)!;
+      try {
+        const s2Res = await fetch(
+          `${S2_API_BASE}/ARXIV:${arxivId}/references?fields=externalIds&limit=500`
+        );
+        if (!s2Res.ok) continue;
+        const s2Data: any = await s2Res.json();
+        const refs = s2Data.data || [];
+
+        for (const ref of refs) {
+          const refArxivId = ref.citedPaper?.externalIds?.ArXiv;
+          if (refArxivId && batchArxivIds.has(refArxivId) && refArxivId !== arxivId) {
+            const citedPaperId = paperMap.get(refArxivId)!;
+            try {
+              db.addCitation(paperId, citedPaperId);
+              citationsCreated++;
+            } catch {
+              // duplicate citation — ignore
+            }
+          }
+        }
+      } catch {
+        // Semantic Scholar request failed for this paper — continue with others
+      }
+    }
+
+    // Step 3: Create worldline
+    const wlResult = db.createWorldline(worldline_name.trim(), worldline_color || '#6366f1');
+    const worldlineId = wlResult.lastInsertRowid as number;
+
+    // Add papers sorted by publication date
+    const sortedPapers = savedPapers.sort(
+      (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
+    );
+    for (let i = 0; i < sortedPapers.length; i++) {
+      db.addWorldlinePaper(worldlineId, sortedPapers[i].id, i);
+    }
+
+    res.status(201).json({
+      success: true,
+      papers_added: savedPapers.length,
+      citations_created: citationsCreated,
+      worldline_id: worldlineId,
+      errors,
+    });
+  } catch (error) {
+    console.error('Batch import error:', error);
+    res.status(500).json({ error: 'Failed to batch import papers' });
+  }
+});
+
 // --- Citations ---
 
 // GET /api/worldlines/citations - Get all citations

@@ -2367,3 +2367,65 @@ input[type="color"] {
   min-width: 40px;
   text-align: center;
 }
+
+/* Batch Import UI */
+.wl-import-section h4 {
+  margin-bottom: 6px;
+}
+
+.wl-import-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.wl-import-textarea {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font-mono, 'SFMono-Regular', 'Consolas', monospace);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.wl-import-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.wl-import-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wl-import-form-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.wl-import-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.wl-import-submit {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.wl-import-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}

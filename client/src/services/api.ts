@@ -275,6 +275,28 @@ export async function removeWorldlinePaper(worldlineId: number, paperId: number)
   await request(`/worldlines/${worldlineId}/papers/${paperId}`, { method: 'DELETE' });
 }
 
+// Batch Import Worldline
+export async function batchImportWorldline(
+  arxivIds: string[],
+  worldlineName: string,
+  worldlineColor?: string
+): Promise<{
+  success: boolean;
+  papers_added: number;
+  citations_created: number;
+  worldline_id: number;
+  errors: string[];
+}> {
+  return request('/worldlines/batch-import', {
+    method: 'POST',
+    body: JSON.stringify({
+      arxiv_ids: arxivIds,
+      worldline_name: worldlineName,
+      worldline_color: worldlineColor,
+    }),
+  });
+}
+
 // Semantic Scholar Discovery
 export async function discoverCitations(arxivId: string): Promise<SemanticScholarResult> {
   return request(`/worldlines/citations/discover/${encodeURIComponent(arxivId)}`);

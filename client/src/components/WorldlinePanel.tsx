@@ -13,7 +13,7 @@ interface WorldlineWithPapers extends Worldline {
   paperIds: Set<number>;
 }
 
-type InteractionMode = 'select' | 'cite';
+type InteractionMode = 'select' | 'cite' | 'import';
 
 export default function WorldlinePanel({ papers, showNotification, onRefresh }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -43,6 +43,13 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [discoverySearch, setDiscoverySearch] = useState('');
   const [discoveryPage, setDiscoveryPage] = useState(0);
   const DISCOVERY_PAGE_SIZE = 10;
+
+  // Batch import form
+  const [importArxivIds, setImportArxivIds] = useState('');
+  const [importWlName, setImportWlName] = useState('');
+  const [importWlColor, setImportWlColor] = useState('#6366f1');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -626,6 +633,49 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
     return papers.some(p => p.arxiv_id === arxivId);
   }, [papers]);
 
+  // Batch import: save papers, infer citations, create worldline
+  const handleBatchImport = async () => {
+    const ids = importArxivIds
+      .split(/[\n,]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    if (ids.length === 0) {
+      showNotification('Enter at least one ArXiv ID');
+      return;
+    }
+    if (!importWlName.trim()) {
+      showNotification('Enter a worldline name');
+      return;
+    }
+
+    setImportLoading(true);
+    setImportStatus(`Importing ${ids.length} papers and inferring citations...`);
+    try {
+      const result = await api.batchImportWorldline(ids, importWlName.trim(), importWlColor);
+      const parts: string[] = [];
+      parts.push(`${result.papers_added} papers added`);
+      parts.push(`${result.citations_created} citations inferred`);
+      if (result.errors.length > 0) {
+        parts.push(`${result.errors.length} errors`);
+      }
+      setImportStatus(`Done: ${parts.join(', ')}`);
+      if (result.errors.length > 0) {
+        showNotification(`Import finished with errors: ${result.errors.join('; ')}`);
+      } else {
+        showNotification(`Worldline "${importWlName.trim()}" created with ${result.papers_added} papers and ${result.citations_created} citations`);
+      }
+      setImportArxivIds('');
+      setImportWlName('');
+      await onRefresh();
+      await loadData();
+    } catch (err: any) {
+      setImportStatus(null);
+      showNotification(err.message || 'Batch import failed');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   // Get short first author name
   const getFirstAuthor = (p: SavedPaper): string => {
     try {
@@ -709,6 +759,13 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
               >
                 Add Citation
               </button>
+              <button
+                className={`btn btn-sm ${mode === 'import' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setMode('import'); setCiteSrcId(null); }}
+                title="Batch import ArXiv papers into a worldline"
+              >
+                Import
+              </button>
             </div>
 
             {mode === 'cite' && (
@@ -716,6 +773,51 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                 {citeSrcId === null
                   ? 'Click the citing paper first'
                   : `Citing: "${papers.find(p => p.id === citeSrcId)?.title.substring(0, 30)}..." -- now click the cited paper`}
+              </div>
+            )}
+
+            {/* Batch import form */}
+            {mode === 'import' && (
+              <div className="wl-section wl-import-section">
+                <h4>Batch Import Worldline</h4>
+                <p className="wl-import-hint">
+                  Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library, citations between them inferred from Semantic Scholar, and a worldline created.
+                </p>
+                <textarea
+                  className="wl-import-textarea"
+                  placeholder={"2301.00001\n2302.12345\n2303.54321"}
+                  value={importArxivIds}
+                  onChange={e => setImportArxivIds(e.target.value)}
+                  rows={6}
+                  disabled={importLoading}
+                />
+                <div className="wl-import-form-row">
+                  <input
+                    type="text"
+                    className="wl-import-name"
+                    placeholder="Worldline name..."
+                    value={importWlName}
+                    onChange={e => setImportWlName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !importLoading && handleBatchImport()}
+                    disabled={importLoading}
+                  />
+                  <input
+                    type="color"
+                    value={importWlColor}
+                    onChange={e => setImportWlColor(e.target.value)}
+                    disabled={importLoading}
+                  />
+                </div>
+                <button
+                  className="btn btn-primary wl-import-submit"
+                  onClick={handleBatchImport}
+                  disabled={importLoading || !importArxivIds.trim() || !importWlName.trim()}
+                >
+                  {importLoading ? 'Importing...' : 'Create Worldline'}
+                </button>
+                {importStatus && (
+                  <div className="wl-import-status">{importStatus}</div>
+                )}
               </div>
             )}
 
