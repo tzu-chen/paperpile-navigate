@@ -44,9 +44,15 @@ export interface Tag {
   color: string;
 }
 
+export interface FavoriteAuthor {
+  id: number;
+  name: string;
+  added_at: string;
+}
+
 export interface CategoryGroup {
   label: string;
   categories: Record<string, string>;
 }
 
-export type ViewMode = 'browse' | 'library' | 'viewer';
+export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer';

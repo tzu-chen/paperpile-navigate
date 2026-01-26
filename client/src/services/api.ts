@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor } from '../types';
 
 const BASE = '/api';
 
@@ -171,4 +171,24 @@ export async function getBibtexText(paperId: number): Promise<string> {
 
 export async function markExported(paperId: number): Promise<void> {
   await request(`/export/mark-exported/${paperId}`, { method: 'POST' });
+}
+
+// Favorite Authors
+export async function getFavoriteAuthors(): Promise<FavoriteAuthor[]> {
+  return request('/authors/favorites');
+}
+
+export async function addFavoriteAuthor(name: string): Promise<FavoriteAuthor> {
+  return request('/authors/favorites', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function removeFavoriteAuthor(id: number): Promise<void> {
+  await request(`/authors/favorites/${id}`, { method: 'DELETE' });
+}
+
+export async function getFavoriteAuthorPublications(): Promise<{ papers: (ArxivPaper & { matchedAuthor: string })[] }> {
+  return request('/authors/favorites/publications');
 }

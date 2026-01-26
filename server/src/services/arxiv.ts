@@ -90,6 +90,30 @@ export async function searchArxiv(params: {
   return { papers, totalResults };
 }
 
+export async function searchByAuthor(authorName: string, maxResults: number = 20): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  const quoted = `"${authorName}"`;
+  const encoded = encodeURIComponent(quoted);
+  const url = `${ARXIV_API_BASE}?search_query=au:${encoded}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArXiv API error: ${response.status} ${response.statusText}`);
+  }
+
+  const xml = await response.text();
+  const result = await parseStringPromise(xml);
+
+  const feed = result.feed;
+  const totalResults = parseInt(feed['opensearch:totalResults']?.[0]?._ || '0', 10);
+
+  if (!feed.entry) {
+    return { papers: [], totalResults: 0 };
+  }
+
+  const papers = feed.entry.map((entry: ArxivEntry) => parseEntry(entry));
+  return { papers, totalResults };
+}
+
 export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null> {
   const url = `${ARXIV_API_BASE}?id_list=${arxivId}`;
   const response = await fetch(url);

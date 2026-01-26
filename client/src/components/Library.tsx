@@ -8,6 +8,8 @@ interface Props {
   onOpenPaper: (paper: SavedPaper) => void;
   onRefresh: () => Promise<void>;
   showNotification: (msg: string) => void;
+  favoriteAuthorNames: Set<string>;
+  onFavoriteAuthor: (name: string) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -24,7 +26,7 @@ const STATUS_COLORS: Record<string, string> = {
   exported: '#8b5cf6',
 };
 
-export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification }: Props) {
+export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -241,7 +243,18 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
 
                 <div className="paper-meta">
                   <span className="paper-authors">
-                    {authors.slice(0, 3).join(', ')}
+                    {authors.slice(0, 3).map((author, i) => (
+                      <span key={i}>
+                        {i > 0 && ', '}
+                        <button
+                          className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
+                          onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
+                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                        >
+                          {author}
+                        </button>
+                      </span>
+                    ))}
                     {authors.length > 3 && ` +${authors.length - 3} more`}
                   </span>
                   <span className="paper-date">

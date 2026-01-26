@@ -6,6 +6,8 @@ interface Props {
   onSavePaper: (paper: ArxivPaper) => Promise<any>;
   onOpenPaper: (paper: ArxivPaper) => void;
   savedPaperIds: Set<string>;
+  favoriteAuthorNames: Set<string>;
+  onFavoriteAuthor: (name: string) => void;
 }
 
 const SORT_OPTIONS = [
@@ -14,7 +16,7 @@ const SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevance' },
 ];
 
-export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds }: Props) {
+export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('cs.AI');
   const [searchQuery, setSearchQuery] = useState('');
@@ -174,7 +176,18 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds }
 
               <div className="paper-meta">
                 <span className="paper-authors">
-                  {paper.authors.slice(0, 5).join(', ')}
+                  {paper.authors.slice(0, 5).map((author, i) => (
+                    <span key={i}>
+                      {i > 0 && ', '}
+                      <button
+                        className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
+                        onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
+                        title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                      >
+                        {author}
+                      </button>
+                    </span>
+                  ))}
                   {paper.authors.length > 5 && ` +${paper.authors.length - 5} more`}
                 </span>
                 <span className="paper-date">

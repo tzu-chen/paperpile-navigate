@@ -11,11 +11,13 @@ interface Props {
   allTags: Tag[];
   onTagsChanged: () => Promise<void>;
   showNotification: (msg: string) => void;
+  favoriteAuthorNames: Set<string>;
+  onFavoriteAuthor: (name: string) => void;
 }
 
 type SidePanel = 'comments' | 'tags' | 'export' | 'info';
 
-export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification }: Props) {
+export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>('comments');
@@ -62,7 +64,20 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
           </a>
         </div>
         <div className="viewer-meta">
-          <span>{authors.join(', ')}</span>
+          <span className="paper-authors">
+            {authors.map((author, i) => (
+              <span key={i}>
+                {i > 0 && ', '}
+                <button
+                  className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
+                  onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
+                  title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                >
+                  {author}
+                </button>
+              </span>
+            ))}
+          </span>
           <span>{new Date(paper.published).toLocaleDateString()}</span>
           {categories.map(c => (
             <span key={c} className="category-badge">{c}</span>
@@ -144,7 +159,20 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 </div>
                 <div className="info-section">
                   <h4>Authors</h4>
-                  <p>{authors.join(', ')}</p>
+                  <p className="paper-authors">
+                    {authors.map((author, i) => (
+                      <span key={i}>
+                        {i > 0 && ', '}
+                        <button
+                          className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
+                          onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
+                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                        >
+                          {author}
+                        </button>
+                      </span>
+                    ))}
+                  </p>
                 </div>
                 <div className="info-section">
                   <h4>Categories</h4>

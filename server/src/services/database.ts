@@ -57,6 +57,12 @@ export function initializeDatabase(): void {
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS favorite_authors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      added_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_papers_arxiv_id ON papers(arxiv_id);
     CREATE INDEX IF NOT EXISTS idx_comments_paper_id ON comments(paper_id);
     CREATE INDEX IF NOT EXISTS idx_paper_tags_paper_id ON paper_tags(paper_id);
@@ -181,6 +187,23 @@ export function getPaperTags(paperId: number) {
     WHERE pt.paper_id = ?
     ORDER BY t.name
   `).all(paperId);
+}
+
+// Favorite author operations
+export function addFavoriteAuthor(name: string) {
+  return db.prepare('INSERT INTO favorite_authors (name) VALUES (?)').run(name);
+}
+
+export function getFavoriteAuthors() {
+  return db.prepare('SELECT * FROM favorite_authors ORDER BY added_at DESC').all();
+}
+
+export function removeFavoriteAuthor(id: number) {
+  return db.prepare('DELETE FROM favorite_authors WHERE id = ?').run(id);
+}
+
+export function getFavoriteAuthorByName(name: string) {
+  return db.prepare('SELECT * FROM favorite_authors WHERE name = ?').get(name);
 }
 
 export default db;

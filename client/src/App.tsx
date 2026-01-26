@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArxivPaper, SavedPaper, Tag, ViewMode } from './types';
+import { ArxivPaper, SavedPaper, Tag, FavoriteAuthor, ViewMode } from './types';
 import * as api from './services/api';
 import PaperBrowser from './components/PaperBrowser';
 import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
+import FavoriteAuthors from './components/FavoriteAuthors';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
   const [savedPapers, setSavedPapers] = useState<SavedPaper[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [favoriteAuthors, setFavoriteAuthors] = useState<FavoriteAuthor[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<SavedPaper | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -30,9 +32,31 @@ export default function App() {
     }
   }, []);
 
+  const loadFavoriteAuthors = useCallback(async () => {
+    try {
+      const authors = await api.getFavoriteAuthors();
+      setFavoriteAuthors(authors);
+    } catch (err) {
+      console.error('Failed to load favorite authors:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadLibrary();
-  }, [loadLibrary]);
+    loadFavoriteAuthors();
+  }, [loadLibrary, loadFavoriteAuthors]);
+
+  const favoriteAuthorNames = new Set(favoriteAuthors.map(a => a.name));
+
+  const handleFavoriteAuthor = async (name: string) => {
+    try {
+      await api.addFavoriteAuthor(name);
+      showNotification(`Added "${name}" to favorite authors`);
+      await loadFavoriteAuthors();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to add author');
+    }
+  };
 
   const handleSavePaper = async (paper: ArxivPaper) => {
     try {
@@ -89,6 +113,12 @@ export default function App() {
               >
                 My Library ({savedPapers.length})
               </button>
+              <button
+                className={`nav-tab ${viewMode === 'authors' ? 'active' : ''}`}
+                onClick={() => setViewMode('authors')}
+              >
+                Favorite Authors ({favoriteAuthors.length})
+              </button>
             </nav>
           )}
           {viewMode === 'viewer' && (
@@ -109,6 +139,8 @@ export default function App() {
             onSavePaper={handleSavePaper}
             onOpenPaper={handleOpenArxivPaper}
             savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
+            favoriteAuthorNames={favoriteAuthorNames}
+            onFavoriteAuthor={handleFavoriteAuthor}
           />
         )}
         {viewMode === 'library' && (
@@ -118,6 +150,18 @@ export default function App() {
             onOpenPaper={handleOpenPaper}
             onRefresh={loadLibrary}
             showNotification={showNotification}
+            favoriteAuthorNames={favoriteAuthorNames}
+            onFavoriteAuthor={handleFavoriteAuthor}
+          />
+        )}
+        {viewMode === 'authors' && (
+          <FavoriteAuthors
+            favoriteAuthors={favoriteAuthors}
+            onAuthorsChanged={loadFavoriteAuthors}
+            onSavePaper={handleSavePaper}
+            onOpenPaper={handleOpenArxivPaper}
+            savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
+            showNotification={showNotification}
           />
         )}
         {viewMode === 'viewer' && selectedPaper && (
@@ -126,6 +170,8 @@ export default function App() {
             allTags={tags}
             onTagsChanged={loadLibrary}
             showNotification={showNotification}
+            favoriteAuthorNames={favoriteAuthorNames}
+            onFavoriteAuthor={handleFavoriteAuthor}
           />
         )}
       </main>
