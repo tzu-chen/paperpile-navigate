@@ -984,3 +984,91 @@ input[type="color"] {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* ========================
+   Favorite Authors
+   ======================== */
+.favorite-authors {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.favorite-authors-controls {
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.favorite-authors-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.favorite-author-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--accent);
+  color: white;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.favorite-author-remove {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color var(--transition);
+}
+
+.favorite-author-remove:hover {
+  color: white;
+}
+
+/* Clickable author names */
+.author-name-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  transition: color var(--transition);
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+}
+
+.author-name-btn:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.author-name-btn.is-favorite {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: default;
+  border-bottom: none;
+}
+
+/* Matched author badge in publications feed */
+.matched-author-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
