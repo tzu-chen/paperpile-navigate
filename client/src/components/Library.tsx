@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SavedPaper, Tag } from '../types';
 import * as api from '../services/api';
+import LaTeX from './LaTeX';
 
 interface Props {
   papers: SavedPaper[];
@@ -227,7 +228,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
               <div key={paper.id} className="paper-card library-card">
                 <div className="paper-card-header">
                   <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
-                    {paper.title}
+                    <LaTeX>{paper.title}</LaTeX>
                   </h3>
                   <div className="paper-actions">
                     <select

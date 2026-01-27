@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArxivPaper, FavoriteAuthor } from '../types';
 import * as api from '../services/api';
+import LaTeX from './LaTeX';
 
 interface Props {
   favoriteAuthors: FavoriteAuthor[];
@@ -162,7 +163,7 @@ export default function FavoriteAuthors({
               <div key={paper.id} className="paper-card">
                 <div className="paper-card-header">
                   <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
-                    {paper.title}
+                    <LaTeX>{paper.title}</LaTeX>
                   </h3>
                   <div className="paper-actions">
                     {isSaved ? (
@@ -206,7 +207,7 @@ export default function FavoriteAuthors({
                 </div>
 
                 <p className={`paper-abstract ${isExpanded ? 'expanded' : ''}`}>
-                  {paper.summary}
+                  <LaTeX>{paper.summary}</LaTeX>
                 </p>
                 {paper.summary.length > 300 && (
                   <button

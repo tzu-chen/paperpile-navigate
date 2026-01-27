@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
 import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult } from '../types';
 import * as api from '../services/api';
+import LaTeX from './LaTeX';
 
 interface Props {
   papers: SavedPaper[];
@@ -856,7 +857,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                   top: tooltipPos.y - chartRect.top - 45,
                 }}
               >
-                <div className="wl-tooltip-title">{displayTitle}</div>
+                <div className="wl-tooltip-title"><LaTeX>{displayTitle}</LaTeX></div>
                 <div className="wl-tooltip-date">{getFirstAuthor(hp)} &middot; {dateStr}</div>
               </div>
             );
@@ -1135,7 +1136,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                     </button>
                   </div>
                   <div className="wl-discover-paper-name" title={selectedPaper.title}>
-                    {selectedPaper.title.length > 60 ? selectedPaper.title.substring(0, 57) + '...' : selectedPaper.title}
+                    <LaTeX>{selectedPaper.title.length > 60 ? selectedPaper.title.substring(0, 57) + '...' : selectedPaper.title}</LaTeX>
                   </div>
 
                   {discoveryLoading && (

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
 import { ChatSession, SavedPaper } from '../types';
 import * as api from '../services/api';
+import LaTeX from './LaTeX';
 
 interface Props {
   savedPapers: SavedPaper[];
@@ -94,7 +95,7 @@ export default function ChatHistory({ savedPapers, onOpenPaper, showNotification
           <div key={arxivId} className="chat-history-group">
             <div className="chat-history-group-header">
               <div className="chat-history-group-title">
-                <h3>{group.title}</h3>
+                <h3><LaTeX>{group.title}</LaTeX></h3>
                 <span className="text-muted">{arxivId} &middot; {group.sessions.length} session{group.sessions.length !== 1 ? 's' : ''}</span>
               </div>
               <div className="chat-history-group-actions">
