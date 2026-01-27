@@ -97,6 +97,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
         <div className="viewer-pdf">
           <PDFViewer
             pdfUrl={api.getPdfProxyUrl(paper.arxiv_id)}
+            onPageChange={setCurrentPage}
           />
         </div>
 
