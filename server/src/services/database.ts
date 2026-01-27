@@ -303,4 +303,29 @@ export function removeWorldlinePaper(worldlineId: number, paperId: number) {
   ).run(worldlineId, paperId);
 }
 
+// Get all worldlines with their papers' titles and summaries (for similarity scoring)
+export function getAllWorldlinesWithPapers(): {
+  id: number;
+  name: string;
+  color: string;
+  papers: { title: string; summary: string }[];
+}[] {
+  const worldlines = db.prepare('SELECT id, name, color FROM worldlines ORDER BY id').all() as {
+    id: number;
+    name: string;
+    color: string;
+  }[];
+
+  const paperStmt = db.prepare(`
+    SELECT p.title, p.summary FROM papers p
+    JOIN worldline_papers wp ON p.id = wp.paper_id
+    WHERE wp.worldline_id = ?
+  `);
+
+  return worldlines.map(wl => ({
+    ...wl,
+    papers: paperStmt.all(wl.id) as { title: string; summary: string }[],
+  }));
+}
+
 export default db;

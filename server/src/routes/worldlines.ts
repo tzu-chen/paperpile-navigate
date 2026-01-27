@@ -1,12 +1,50 @@
 import { Router, Request, Response } from 'express';
 import * as db from '../services/database';
 import { getArxivPaper } from '../services/arxiv';
+import { computeWorldlineSimilarity } from '../services/similarity';
 
 const router = Router();
 
 function paramInt(val: string | string[]): number {
   return parseInt(String(val), 10);
 }
+
+// --- Similarity Scoring ---
+
+// POST /api/worldlines/similarity — compute similarity between browse papers and worldlines
+router.post('/similarity', (req: Request, res: Response) => {
+  try {
+    const { papers, threshold } = req.body;
+    if (!papers || !Array.isArray(papers)) {
+      return res.status(400).json({ error: 'papers array is required' });
+    }
+    const t = typeof threshold === 'number' ? threshold : 0.15;
+
+    const worldlineProfiles = db.getAllWorldlinesWithPapers()
+      .filter(wl => wl.papers.length > 0)
+      .map(wl => ({
+        worldlineId: wl.id,
+        worldlineName: wl.name,
+        worldlineColor: wl.color,
+        papers: wl.papers,
+      }));
+
+    if (worldlineProfiles.length === 0) {
+      return res.json({ results: [] });
+    }
+
+    const results = computeWorldlineSimilarity(
+      papers.map((p: any) => ({ id: p.id, title: p.title, summary: p.summary })),
+      worldlineProfiles,
+      t
+    );
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Similarity scoring error:', error);
+    res.status(500).json({ error: 'Failed to compute similarity' });
+  }
+});
 
 // --- Semantic Scholar ---
 

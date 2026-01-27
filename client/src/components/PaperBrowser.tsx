@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ArxivPaper, CategoryGroup } from '../types';
+import { useState, useEffect, useRef } from 'react';
+import { ArxivPaper, CategoryGroup, PaperSimilarityResult, WorldlineSimilarityMatch } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 
@@ -30,6 +30,9 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const [loading, setLoading] = useState(false);
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [expandedAbstracts, setExpandedAbstracts] = useState<Set<string>>(new Set());
+  const [similarityMap, setSimilarityMap] = useState<Map<string, WorldlineSimilarityMatch[]>>(new Map());
+  const [scanningWorldlines, setScanningWorldlines] = useState(false);
+  const similarityAbortRef = useRef<AbortController | null>(null);
 
   const PAGE_SIZE = 20;
 
@@ -40,6 +43,45 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   useEffect(() => {
     performSearch(0);
   }, [selectedCategory, sortBy]);
+
+  // Compute worldline similarity when papers change
+  useEffect(() => {
+    if (papers.length === 0) {
+      setSimilarityMap(new Map());
+      return;
+    }
+
+    // Cancel any in-progress request
+    if (similarityAbortRef.current) {
+      similarityAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    similarityAbortRef.current = controller;
+
+    const settings = api.getSettings();
+
+    setScanningWorldlines(true);
+    api.checkWorldlineSimilarity(
+      papers.map(p => ({ id: p.id, title: p.title, summary: p.summary })),
+      settings.similarityThreshold
+    ).then(results => {
+      if (controller.signal.aborted) return;
+      const map = new Map<string, WorldlineSimilarityMatch[]>();
+      for (const r of results) {
+        map.set(r.paperId, r.matches);
+      }
+      setSimilarityMap(map);
+    }).catch(err => {
+      if (controller.signal.aborted) return;
+      console.error('Similarity check failed:', err);
+    }).finally(() => {
+      if (!controller.signal.aborted) {
+        setScanningWorldlines(false);
+      }
+    });
+
+    return () => controller.abort();
+  }, [papers]);
 
   async function performSearch(startPage: number) {
     setLoading(true);
@@ -142,6 +184,18 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
       {loading && <div className="loading">Searching ArXiv...</div>}
 
+      {!loading && scanningWorldlines && (
+        <div className="worldline-scanning-bar">
+          Scanning worldline similarity...
+        </div>
+      )}
+
+      {!loading && !scanningWorldlines && similarityMap.size > 0 && (
+        <div className="worldline-scanning-bar done">
+          {similarityMap.size} paper{similarityMap.size !== 1 ? 's' : ''} matched to worldlines
+        </div>
+      )}
+
       {!loading && papers.length === 0 && (
         <div className="empty-state">No papers found. Try a different category or search term.</div>
       )}
@@ -151,9 +205,10 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
           const isSaved = savedPaperIds.has(paper.id);
           const isSaving = savingIds.has(paper.id);
           const isExpanded = expandedAbstracts.has(paper.id);
+          const worldlineMatches = similarityMap.get(paper.id);
 
           return (
-            <div key={paper.id} className="paper-card">
+            <div key={paper.id} className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
               <div className="paper-card-header">
                 <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
                   <LaTeX>{paper.title}</LaTeX>
@@ -180,6 +235,31 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                   </button>
                 </div>
               </div>
+
+              {worldlineMatches && worldlineMatches.length > 0 && (
+                <div className="worldline-matches">
+                  {worldlineMatches.map(match => (
+                    <span
+                      key={match.worldlineId}
+                      className="worldline-match-badge"
+                      style={{
+                        borderColor: match.worldlineColor,
+                        color: match.worldlineColor,
+                      }}
+                      title={`Similarity score: ${match.score.toFixed(3)}`}
+                    >
+                      <span
+                        className="worldline-match-dot"
+                        style={{ background: match.worldlineColor }}
+                      />
+                      {match.worldlineName}
+                      <span className="worldline-match-score">
+                        {(match.score * 100).toFixed(0)}%
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div className="paper-meta">
                 <span className="paper-authors">
