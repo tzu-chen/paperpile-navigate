@@ -63,6 +63,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const [importWlMode, setImportWlMode] = useState<'new' | 'existing'>('new');
   const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
+  // Citation arrows visibility
+  const [showCitations, setShowCitations] = useState(true);
+
   // Collapsible sections
   const [allPapersOpen, setAllPapersOpen] = useState(true);
 
@@ -248,10 +251,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         .text(cat);
     });
 
-    // Draw citation edges — always visible with persistent styling
+    // Draw citation edges — conditionally visible
     const citationLines = chartArea.append('g').attr('class', 'citation-lines');
 
-    citations.forEach(c => {
+    if (showCitations) citations.forEach(c => {
       const srcPos = paperPositions.get(c.citing_paper_id);
       const tgtPos = paperPositions.get(c.cited_paper_id);
       if (!srcPos || !tgtPos) return;
@@ -589,7 +592,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds]);
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, showCitations]);
 
   // Resize handler
   useEffect(() => {
@@ -881,6 +884,13 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 title="Batch import ArXiv papers into a worldline"
               >
                 Import
+              </button>
+              <button
+                className={`btn btn-sm ${showCitations ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setShowCitations(v => !v)}
+                title={showCitations ? 'Hide citation arrows' : 'Show citation arrows'}
+              >
+                {showCitations ? 'Arrows ON' : 'Arrows OFF'}
               </button>
             </div>
 
