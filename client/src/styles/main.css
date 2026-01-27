@@ -2824,13 +2824,24 @@ input[type="color"] {
   position: relative;
 }
 
-.wl-sidebar-connector {
+.wl-sidebar-node-wrapper:not(:first-child)::before {
+  content: '';
   position: absolute;
-  left: 7px;
-  top: -6px;
-  width: 0;
-  height: 6px;
-  border-left: 2px solid;
+  left: 14px;
+  top: 0;
+  height: 15px;
+  border-left: 2px solid var(--wl-color);
+  pointer-events: none;
+}
+
+.wl-sidebar-node-wrapper:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  bottom: 0;
+  border-left: 2px solid var(--wl-color);
+  pointer-events: none;
 }
 
 .wl-sidebar-node {

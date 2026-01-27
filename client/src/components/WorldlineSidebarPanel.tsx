@@ -115,14 +115,7 @@ export default function WorldlineSidebarPanel({ paper, onOpenPaper, showNotifica
               {wl.papers.map((p, idx) => {
                 const isCurrent = p.id === paper.id;
                 return (
-                  <div key={p.id} className="wl-sidebar-node-wrapper">
-                    {/* Vertical connector line */}
-                    {idx > 0 && (
-                      <div
-                        className="wl-sidebar-connector"
-                        style={{ borderColor: wl.color }}
-                      />
-                    )}
+                  <div key={p.id} className="wl-sidebar-node-wrapper" style={{ '--wl-color': wl.color } as React.CSSProperties}>
                     <div
                       className={`wl-sidebar-node ${isCurrent ? 'current' : ''}`}
                       onDoubleClick={() => {
