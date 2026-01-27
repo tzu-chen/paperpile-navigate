@@ -98,4 +98,16 @@ export interface SemanticScholarResult {
   references: SemanticScholarPaper[];
 }
 
+export interface WorldlineSimilarityMatch {
+  worldlineId: number;
+  worldlineName: string;
+  worldlineColor: string;
+  score: number;
+}
+
+export interface PaperSimilarityResult {
+  paperId: string;
+  matches: WorldlineSimilarityMatch[];
+}
+
 export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory' | 'worldline';

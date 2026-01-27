@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline, SemanticScholarResult } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline, SemanticScholarResult, PaperSimilarityResult } from '../types';
 
 const BASE = '/api';
 
@@ -315,20 +315,39 @@ export async function importCitedPaper(
   });
 }
 
+// Worldline Similarity
+export async function checkWorldlineSimilarity(
+  papers: { id: string; title: string; summary: string }[],
+  threshold: number
+): Promise<PaperSimilarityResult[]> {
+  const data = await request<{ results: PaperSimilarityResult[] }>('/worldlines/similarity', {
+    method: 'POST',
+    body: JSON.stringify({ papers, threshold }),
+  });
+  return data.results;
+}
+
 // Settings (localStorage)
 const SETTINGS_KEY = 'paperpile-navigate-settings';
 
 export interface AppSettings {
   claudeApiKey: string;
   colorScheme: string;
+  similarityThreshold: number;
 }
+
+const DEFAULT_SETTINGS: AppSettings = {
+  claudeApiKey: '',
+  colorScheme: 'default-dark',
+  similarityThreshold: 0.15,
+};
 
 export function getSettings(): AppSettings {
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
-    if (stored) return { colorScheme: 'default-dark', ...JSON.parse(stored) };
+    if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
   } catch {}
-  return { claudeApiKey: '', colorScheme: 'default-dark' };
+  return { ...DEFAULT_SETTINGS };
 }
 
 export function saveSettings(settings: AppSettings): void {
