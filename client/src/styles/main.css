@@ -2907,12 +2907,6 @@ input[type="color"] {
   font-style: italic;
 }
 
-.worldline-scanning-bar.done {
-  color: var(--success);
-  font-style: normal;
-  font-weight: 500;
-}
-
 .paper-card.has-worldline-match {
   border-left: 3px solid var(--accent);
 }

@@ -190,12 +190,6 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
         </div>
       )}
 
-      {!loading && !scanningWorldlines && similarityMap.size > 0 && (
-        <div className="worldline-scanning-bar done">
-          {similarityMap.size} paper{similarityMap.size !== 1 ? 's' : ''} matched to worldlines
-        </div>
-      )}
-
       {!loading && papers.length === 0 && (
         <div className="empty-state">No papers found. Try a different category or search term.</div>
       )}
