@@ -205,6 +205,7 @@ export default function App() {
             papers={savedPapers}
             showNotification={showNotification}
             onRefresh={loadLibrary}
+            onOpenPaper={handleOpenPaper}
           />
         )}
         {viewMode === 'chatHistory' && (

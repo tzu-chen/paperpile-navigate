@@ -2165,12 +2165,21 @@ input[type="color"] {
 
 .wl-paper-item {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition);
+}
+
+.wl-paper-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
 
 .wl-paper-item:hover {
@@ -2180,6 +2189,16 @@ input[type="color"] {
 .wl-paper-item.selected {
   background: rgba(99, 102, 241, 0.15);
   border-left: 3px solid var(--accent);
+}
+
+.wl-paper-delete-btn {
+  opacity: 0;
+  transition: opacity var(--transition);
+  flex-shrink: 0;
+}
+
+.wl-paper-item:hover .wl-paper-delete-btn {
+  opacity: 1;
 }
 
 .wl-paper-title {

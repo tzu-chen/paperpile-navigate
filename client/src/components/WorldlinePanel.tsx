@@ -7,6 +7,7 @@ interface Props {
   papers: SavedPaper[];
   showNotification: (msg: string) => void;
   onRefresh: () => Promise<void>;
+  onOpenPaper: (paper: SavedPaper) => void;
 }
 
 interface WorldlineWithPapers extends Worldline {
@@ -15,7 +16,7 @@ interface WorldlineWithPapers extends Worldline {
 
 type InteractionMode = 'select' | 'import';
 
-export default function WorldlinePanel({ papers, showNotification, onRefresh }: Props) {
+export default function WorldlinePanel({ papers, showNotification, onRefresh, onOpenPaper }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -446,6 +447,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         toggleSelection(p.id);
       });
 
+      node.on('dblclick', (event: MouseEvent) => {
+        event.stopPropagation();
+        onOpenPaper(p);
+      });
+
       // Right-click drag: start
       node.on('mousedown', function (event: MouseEvent) {
         if (event.button === 2) {
@@ -650,6 +656,18 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const handleSelectWorldlinePapers = (wl: WorldlineWithPapers) => {
     setSelectedPaperIds(new Set(wl.paperIds));
     setActiveWorldlineId(wl.id);
+  };
+
+  const handleDeletePaper = async (paper: SavedPaper) => {
+    if (!confirm(`Delete "${paper.title}" from your library?`)) return;
+    try {
+      await api.deletePaper(paper.id);
+      showNotification('Paper deleted');
+      await onRefresh();
+      await loadData();
+    } catch {
+      showNotification('Failed to delete paper');
+    }
   };
 
   // Discover citations from Semantic Scholar
@@ -1251,12 +1269,21 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                           onMouseEnter={() => setHoveredPaperId(p.id)}
                           onMouseLeave={() => setHoveredPaperId(null)}
                         >
-                          <span className="wl-paper-title" title={p.title}>
-                            {p.title.length > 50 ? p.title.substring(0, 47) + '...' : p.title}
-                          </span>
-                          <span className="wl-paper-meta-small">
-                            {getFirstAuthor(p)} &middot; {getYear(p)}
-                          </span>
+                          <div className="wl-paper-item-info">
+                            <span className="wl-paper-title" title={p.title}>
+                              {p.title.length > 50 ? p.title.substring(0, 47) + '...' : p.title}
+                            </span>
+                            <span className="wl-paper-meta-small">
+                              {getFirstAuthor(p)} &middot; {getYear(p)}
+                            </span>
+                          </div>
+                          <button
+                            className="btn-icon btn-danger-icon wl-paper-delete-btn"
+                            onClick={(e) => { e.stopPropagation(); handleDeletePaper(p); }}
+                            title="Delete from library"
+                          >
+                            &times;
+                          </button>
                         </div>
                       );
                     })}
