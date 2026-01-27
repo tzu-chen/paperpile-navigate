@@ -32,6 +32,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const dragLineRef = useRef<SVGLineElement | null>(null);
   const citationsRef = useRef<Citation[]>([]);
 
+  // Ref for click/dblclick disambiguation (delay click so dblclick can cancel it)
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onOpenPaperRef = useRef(onOpenPaper);
+  onOpenPaperRef.current = onOpenPaper;
+
   // Worldline creation form
   const [newWlName, setNewWlName] = useState('');
   const [newWlColor, setNewWlColor] = useState('#6366f1');
@@ -444,12 +449,24 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
 
       node.on('click', (event: MouseEvent) => {
         event.stopPropagation();
-        toggleSelection(p.id);
+        // Delay toggle so a rapid second click (dblclick) can cancel it
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        clickTimerRef.current = setTimeout(() => {
+          clickTimerRef.current = null;
+          toggleSelection(p.id);
+        }, 250);
       });
 
       node.on('dblclick', (event: MouseEvent) => {
         event.stopPropagation();
-        onOpenPaper(p);
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        onOpenPaperRef.current(p);
       });
 
       // Right-click drag: start
