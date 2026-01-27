@@ -2744,3 +2744,142 @@ input[type="color"] {
   border-radius: var(--radius-sm);
   line-height: 1.4;
 }
+
+/* ========================
+   Worldline Sidebar Panel (PDF Viewer)
+   ======================== */
+.wl-sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wl-sidebar-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.wl-sidebar-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+.wl-sidebar-group {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.wl-sidebar-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background var(--transition);
+  user-select: none;
+}
+
+.wl-sidebar-group-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.wl-sidebar-group-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wl-sidebar-group-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wl-sidebar-group-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.wl-sidebar-nodes {
+  padding: 4px 12px 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.wl-sidebar-node-wrapper {
+  position: relative;
+}
+
+.wl-sidebar-connector {
+  position: absolute;
+  left: 7px;
+  top: -6px;
+  width: 0;
+  height: 6px;
+  border-left: 2px solid;
+}
+
+.wl-sidebar-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.wl-sidebar-node:hover {
+  background: var(--bg-tertiary);
+}
+
+.wl-sidebar-node.current {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.wl-sidebar-node-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.wl-sidebar-node-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.wl-sidebar-node-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.wl-sidebar-node-title.current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.wl-sidebar-node-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
