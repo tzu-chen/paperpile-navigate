@@ -721,17 +721,100 @@ input[type="color"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 6px 12px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  gap: 12px;
 }
 
-.pdf-frame {
+.pdf-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: var(--transition);
+}
+
+.pdf-nav-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.pdf-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pdf-page-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pdf-page-input {
+  width: 40px;
+  height: 26px;
+  padding: 2px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.pdf-page-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pdf-page-total {
+  color: var(--text-muted);
+}
+
+.pdf-zoom-level {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: center;
+}
+
+.pdf-pages-container {
   flex: 1;
-  width: 100%;
-  border: none;
-  background: #525659;
+  overflow: auto;
+  background: var(--bg-tertiary);
+}
+
+.pdf-page-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.pdf-page-wrapper .react-pdf__Page {
+  box-shadow: var(--shadow-lg);
+}
+
+.pdf-page-wrapper .react-pdf__Page__canvas {
+  display: block;
 }
 
 .pdf-loading, .pdf-error {
@@ -742,6 +825,11 @@ input[type="color"] {
   padding: 40px;
   color: var(--text-secondary);
   gap: 16px;
+}
+
+/* Override react-pdf annotation layer link colors to match theme */
+.pdf-page-wrapper .react-pdf__Page__annotations a {
+  color: var(--accent);
 }
 
 /* ========================
