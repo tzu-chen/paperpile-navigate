@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
 import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult } from '../types';
 import * as api from '../services/api';
-import { computeUmapPositions } from '../services/embedding';
 import LaTeX from './LaTeX';
 
 interface Props {
@@ -103,18 +102,48 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     citationsRef.current = citations;
   }, [citations]);
 
-  // Compute paper positions: x via UMAP embedding of paper text, y is time
+  // Compute paper positions: x is spread by category, y is time
   const paperPositions = useMemo(() => {
     if (papers.length === 0) return new Map<number, { x: number; y: number }>();
 
-    // UMAP 1D embedding for x-axis (topic similarity)
-    const umapX = computeUmapPositions(papers);
+    // Parse dates and find time range
+    const parsedPapers = papers.map(p => ({
+      ...p,
+      date: new Date(p.published),
+      cats: (() => { try { return JSON.parse(p.categories); } catch { return []; } })() as string[],
+    }));
+
+    // Group by primary category for x-spread
+    const catGroups = new Map<string, number[]>();
+    parsedPapers.forEach(p => {
+      const primaryCat = p.cats[0] || 'unknown';
+      if (!catGroups.has(primaryCat)) catGroups.set(primaryCat, []);
+      catGroups.get(primaryCat)!.push(p.id);
+    });
+
+    const catKeys = Array.from(catGroups.keys()).sort();
+    const catXMap = new Map<string, number>();
+    catKeys.forEach((cat, i) => {
+      catXMap.set(cat, (i + 1) / (catKeys.length + 1));
+    });
 
     const positions = new Map<number, { x: number; y: number }>();
-    papers.forEach(p => {
+    // Track occupancy within each category for sub-spreading
+    const catCounters = new Map<string, number>();
+
+    parsedPapers.forEach(p => {
+      const primaryCat = p.cats[0] || 'unknown';
+      const baseX = catXMap.get(primaryCat) || 0.5;
+      const count = catCounters.get(primaryCat) || 0;
+      catCounters.set(primaryCat, count + 1);
+
+      // Add small horizontal jitter based on count within category
+      const groupSize = catGroups.get(primaryCat)?.length || 1;
+      const jitter = groupSize > 1 ? ((count / (groupSize - 1)) - 0.5) * 0.06 : 0;
+
       positions.set(p.id, {
-        x: umapX.get(p.id) ?? 0.5,
-        y: new Date(p.published).getTime(),
+        x: baseX + jitter,
+        y: p.date.getTime(),
       });
     });
 
@@ -202,14 +231,28 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .call(d3.axisBottom(xScale).ticks(0))
       .attr('class', 'wl-axis');
 
-    // X-axis label (UMAP topic similarity)
-    g.append('text')
-      .attr('x', innerW / 2)
-      .attr('y', innerH + 30)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'var(--text-muted)')
-      .attr('font-size', '12px')
-      .text('Topic Similarity');
+    // Category labels at the top
+    const catGroups = new Map<string, number>();
+    papers.forEach(p => {
+      try {
+        const cats = JSON.parse(p.categories) as string[];
+        const cat = cats[0] || 'unknown';
+        if (!catGroups.has(cat)) {
+          const pos = paperPositions.get(p.id);
+          if (pos) catGroups.set(cat, pos.x);
+        }
+      } catch {}
+    });
+
+    catGroups.forEach((xPos, cat) => {
+      g.append('text')
+        .attr('x', xScale(xPos))
+        .attr('y', -10)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-muted)')
+        .attr('font-size', '10px')
+        .text(cat);
+    });
 
     // Draw citation edges — conditionally visible
     const citationLines = chartArea.append('g').attr('class', 'citation-lines');
