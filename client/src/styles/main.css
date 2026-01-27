@@ -1976,6 +1976,23 @@ input[type="color"] {
   margin-bottom: 8px;
 }
 
+.wl-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.wl-toggle-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
 .wl-collapsible-header {
   cursor: pointer;
   user-select: none;

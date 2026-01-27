@@ -14,7 +14,7 @@ interface WorldlineWithPapers extends Worldline {
   paperIds: Set<number>;
 }
 
-type InteractionMode = 'select' | 'import';
+type InteractionMode = 'select' | 'import' | 'view';
 
 export default function WorldlinePanel({ papers, showNotification, onRefresh, onOpenPaper }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -63,8 +63,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const [importWlMode, setImportWlMode] = useState<'new' | 'existing'>('new');
   const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
-  // Citation arrows visibility
+  // Visibility toggles
   const [showCitations, setShowCitations] = useState(true);
+  const [showWorldlines, setShowWorldlines] = useState(true);
+  const [showNonWorldlinePapers, setShowNonWorldlinePapers] = useState(true);
 
   // Collapsible sections
   const [allPapersOpen, setAllPapersOpen] = useState(true);
@@ -308,7 +310,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     });
 
     // Draw worldline paths (connecting papers in a worldline in time order)
-    worldlines.forEach(wl => {
+    if (showWorldlines) worldlines.forEach(wl => {
       const wlPaperPositions = Array.from(wl.paperIds)
         .map(id => ({ id, pos: paperPositions.get(id) }))
         .filter((p): p is { id: number; pos: { x: number; y: number } } => !!p.pos)
@@ -351,6 +353,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
           belongsToWorldlines.push(wl);
         }
       });
+
+      // Hide papers not assigned to any worldline when toggled off
+      if (!showNonWorldlinePapers && belongsToWorldlines.length === 0) return;
 
       if (belongsToWorldlines.length > 0) {
         fillColor = belongsToWorldlines[0].color;
@@ -592,7 +597,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, showCitations]);
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, showCitations, showWorldlines, showNonWorldlinePapers]);
 
   // Resize handler
   useEffect(() => {
@@ -886,11 +891,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 Import
               </button>
               <button
-                className={`btn btn-sm ${showCitations ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setShowCitations(v => !v)}
-                title={showCitations ? 'Hide citation arrows' : 'Show citation arrows'}
+                className={`btn btn-sm ${mode === 'view' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setMode('view')}
+                title="Visibility settings"
               >
-                {showCitations ? 'Arrows ON' : 'Arrows OFF'}
+                View
               </button>
             </div>
 
@@ -983,6 +988,37 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 {importStatus && (
                   <div className="wl-import-status">{importStatus}</div>
                 )}
+              </div>
+            )}
+
+            {/* Visibility toggles */}
+            {mode === 'view' && (
+              <div className="wl-section wl-view-section">
+                <h4>Visibility</h4>
+                <label className="wl-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={showCitations}
+                    onChange={() => setShowCitations(v => !v)}
+                  />
+                  <span>Citation Arrows</span>
+                </label>
+                <label className="wl-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={showWorldlines}
+                    onChange={() => setShowWorldlines(v => !v)}
+                  />
+                  <span>Worldline Paths</span>
+                </label>
+                <label className="wl-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={showNonWorldlinePapers}
+                    onChange={() => setShowNonWorldlinePapers(v => !v)}
+                  />
+                  <span>Unassigned Papers</span>
+                </label>
               </div>
             )}
 
