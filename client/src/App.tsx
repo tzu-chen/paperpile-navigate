@@ -223,6 +223,7 @@ export default function App() {
             showNotification={showNotification}
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
+            onOpenPaper={handleOpenPaper}
           />
         )}
       </main>

@@ -6,6 +6,7 @@ import CommentPanel from './CommentPanel';
 import TagPanel from './TagPanel';
 import ExportPanel from './ExportPanel';
 import ChatPanel from './ChatPanel';
+import WorldlineSidebarPanel from './WorldlineSidebarPanel';
 import LaTeX from './LaTeX';
 
 interface Props {
@@ -15,11 +16,12 @@ interface Props {
   showNotification: (msg: string) => void;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
+  onOpenPaper: (paper: SavedPaper) => void;
 }
 
-type SidePanel = 'chat' | 'comments' | 'tags' | 'export' | 'info';
+type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
+export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>('comments');
@@ -124,12 +126,6 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
               Comments ({comments.length})
             </button>
             <button
-              className={`sidebar-tab ${activePanel === 'tags' ? 'active' : ''}`}
-              onClick={() => setActivePanel('tags')}
-            >
-              Tags ({paperTags.length})
-            </button>
-            <button
               className={`sidebar-tab ${activePanel === 'export' ? 'active' : ''}`}
               onClick={() => setActivePanel('export')}
             >
@@ -140,6 +136,12 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
               onClick={() => setActivePanel('info')}
             >
               Info
+            </button>
+            <button
+              className={`sidebar-tab ${activePanel === 'worldline' ? 'active' : ''}`}
+              onClick={() => setActivePanel('worldline')}
+            >
+              Worldline
             </button>
           </div>
 
@@ -160,15 +162,6 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 showNotification={showNotification}
               />
             )}
-            {activePanel === 'tags' && (
-              <TagPanel
-                paperId={paper.id}
-                paperTags={paperTags}
-                allTags={allTags}
-                onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
-                showNotification={showNotification}
-              />
-            )}
             {activePanel === 'export' && (
               <ExportPanel
                 paper={paper}
@@ -177,6 +170,16 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
             )}
             {activePanel === 'info' && (
               <div className="info-panel">
+                <div className="info-section">
+                  <h4>Tags</h4>
+                  <TagPanel
+                    paperId={paper.id}
+                    paperTags={paperTags}
+                    allTags={allTags}
+                    onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
+                    showNotification={showNotification}
+                  />
+                </div>
                 <div className="info-section">
                   <h4>Abstract</h4>
                   <p><LaTeX>{paper.summary}</LaTeX></p>
@@ -227,6 +230,13 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                   <p>{new Date(paper.updated).toLocaleDateString()}</p>
                 </div>
               </div>
+            )}
+            {activePanel === 'worldline' && (
+              <WorldlineSidebarPanel
+                paper={paper}
+                onOpenPaper={onOpenPaper}
+                showNotification={showNotification}
+              />
             )}
           </div>
         </div>}
