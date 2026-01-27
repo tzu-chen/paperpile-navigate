@@ -13,7 +13,7 @@ interface WorldlineWithPapers extends Worldline {
   paperIds: Set<number>;
 }
 
-type InteractionMode = 'select' | 'cite' | 'import';
+type InteractionMode = 'select' | 'import';
 
 export default function WorldlinePanel({ papers, showNotification, onRefresh }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -25,7 +25,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [hoveredPaperId, setHoveredPaperId] = useState<number | null>(null);
   const [activeWorldlineId, setActiveWorldlineId] = useState<number | null>(null);
   const [mode, setMode] = useState<InteractionMode>('select');
-  const [citeSrcId, setCiteSrcId] = useState<number | null>(null);
+
+  // Refs for right-click drag citation
+  const dragSrcRef = useRef<number | null>(null);
+  const dragLineRef = useRef<SVGLineElement | null>(null);
+  const citationsRef = useRef<Citation[]>([]);
 
   // Worldline creation form
   const [newWlName, setNewWlName] = useState('');
@@ -54,7 +58,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
   // Collapsible sections
-  const [citationsOpen, setCitationsOpen] = useState(true);
   const [allPapersOpen, setAllPapersOpen] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -81,6 +84,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Keep citationsRef in sync for D3 handlers
+  useEffect(() => {
+    citationsRef.current = citations;
+  }, [citations]);
 
   // Compute paper positions: x is spread by category, y is time
   const paperPositions = useMemo(() => {
@@ -197,6 +205,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       });
 
     svg.call(zoom);
+
+    // Prevent browser context menu on right-click (used for drag-citations)
+    svg.on('contextmenu', (event: Event) => event.preventDefault());
 
     // Axes
     const yAxisG = g.append('g')
@@ -346,13 +357,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
         radius = 8;
       }
 
-      const isCiteSrc = citeSrcId === p.id;
-      if (isCiteSrc) {
-        strokeColor = 'var(--warning)';
-        strokeWidth = 3;
-        radius = 9;
-      }
-
       const node = nodes.append('circle')
         .attr('cx', xScale(pos.x))
         .attr('cy', yScale(pos.y))
@@ -439,12 +443,110 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
 
       node.on('click', (event: MouseEvent) => {
         event.stopPropagation();
-        if (mode === 'cite') {
-          handleCiteClick(p.id);
-        } else {
-          toggleSelection(p.id);
+        toggleSelection(p.id);
+      });
+
+      // Right-click drag: start
+      node.on('mousedown', function (event: MouseEvent) {
+        if (event.button === 2) {
+          event.preventDefault();
+          event.stopPropagation();
+          dragSrcRef.current = p.id;
+
+          // Highlight source node
+          const el = d3.select(this);
+          el.attr('stroke', 'var(--warning)')
+            .attr('stroke-width', 3)
+            .attr('r', +el.attr('data-base-r') + 3);
+
+          // Create drag line
+          const startX = xScale(pos.x);
+          const startY = yScale(pos.y);
+          const line = chartArea.append('line')
+            .attr('class', 'drag-citation-line')
+            .attr('x1', startX)
+            .attr('y1', startY)
+            .attr('x2', startX)
+            .attr('y2', startY)
+            .attr('stroke', 'var(--accent)')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '5,5')
+            .attr('pointer-events', 'none');
+          dragLineRef.current = line.node();
         }
       });
+
+      // Right-click drag: drop on target node
+      node.on('mouseup', async function (event: MouseEvent) {
+        if (event.button === 2 && dragSrcRef.current !== null && dragSrcRef.current !== p.id) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const srcId = dragSrcRef.current;
+          const tgtId = p.id;
+
+          // Clean up drag visual
+          if (dragLineRef.current) {
+            d3.select(dragLineRef.current).remove();
+            dragLineRef.current = null;
+          }
+          dragSrcRef.current = null;
+
+          // Check if citation exists (in either direction)
+          const existing = citationsRef.current.find(
+            c => (c.citing_paper_id === srcId && c.cited_paper_id === tgtId) ||
+                 (c.citing_paper_id === tgtId && c.cited_paper_id === srcId)
+          );
+
+          if (existing) {
+            try {
+              await api.removeCitation(existing.citing_paper_id, existing.cited_paper_id);
+              showNotification('Citation removed');
+              await loadData();
+            } catch (err: any) {
+              showNotification(err.message || 'Failed to remove citation');
+            }
+          } else {
+            try {
+              await api.addCitation(srcId, tgtId);
+              showNotification('Citation added');
+              await loadData();
+            } catch (err: any) {
+              showNotification(err.message || 'Failed to add citation');
+            }
+          }
+        }
+      });
+    });
+
+    // SVG-level mousemove for drag line tracking
+    svg.on('mousemove.citedrag', function (event: MouseEvent) {
+      if (dragSrcRef.current === null || !dragLineRef.current) return;
+
+      const svgNode = svg.node()!;
+      const point = svgNode.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const svgPoint = point.matrixTransform(svgNode.getScreenCTM()!.inverse());
+
+      const transform = d3.zoomTransform(svgNode);
+      const chartX = (svgPoint.x - margin.left - transform.x) / transform.k;
+      const chartY = (svgPoint.y - margin.top - transform.y) / transform.k;
+
+      d3.select(dragLineRef.current)
+        .attr('x2', chartX)
+        .attr('y2', chartY);
+    });
+
+    // SVG-level mouseup to cancel drag on empty space
+    svg.on('mouseup.citedrag', function (event: MouseEvent) {
+      if (event.button === 2 && dragSrcRef.current !== null) {
+        if (dragLineRef.current) {
+          d3.select(dragLineRef.current).remove();
+          dragLineRef.current = null;
+        }
+        dragSrcRef.current = null;
+      }
     });
 
     // Axis styling
@@ -464,7 +566,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, mode, citeSrcId]);
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds]);
 
   // Resize handler
   useEffect(() => {
@@ -488,36 +590,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
       else next.add(paperId);
       return next;
     });
-  };
-
-  const handleCiteClick = async (paperId: number) => {
-    if (citeSrcId === null) {
-      setCiteSrcId(paperId);
-      showNotification('Now click the paper that is cited by this paper');
-    } else {
-      if (citeSrcId === paperId) {
-        setCiteSrcId(null);
-        return;
-      }
-      try {
-        await api.addCitation(citeSrcId, paperId);
-        showNotification('Citation added');
-        setCiteSrcId(null);
-        await loadData();
-      } catch (err: any) {
-        showNotification(err.message || 'Failed to add citation');
-      }
-    }
-  };
-
-  const handleRemoveCitation = async (citingId: number, citedId: number) => {
-    try {
-      await api.removeCitation(citingId, citedId);
-      showNotification('Citation removed');
-      await loadData();
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to remove citation');
-    }
   };
 
   const handleCreateWorldline = async () => {
@@ -764,33 +836,18 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
             <div className="wl-mode-bar">
               <button
                 className={`btn btn-sm ${mode === 'select' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => { setMode('select'); setCiteSrcId(null); }}
+                onClick={() => setMode('select')}
               >
                 Select
               </button>
               <button
-                className={`btn btn-sm ${mode === 'cite' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => { setMode('cite'); setCiteSrcId(null); }}
-                title="Click two papers to create a citation link"
-              >
-                Add Citation
-              </button>
-              <button
                 className={`btn btn-sm ${mode === 'import' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => { setMode('import'); setCiteSrcId(null); }}
+                onClick={() => setMode('import')}
                 title="Batch import ArXiv papers into a worldline"
               >
                 Import
               </button>
             </div>
-
-            {mode === 'cite' && (
-              <div className="wl-cite-hint">
-                {citeSrcId === null
-                  ? 'Click the citing paper first'
-                  : `Citing: "${papers.find(p => p.id === citeSrcId)?.title.substring(0, 30)}..." -- now click the cited paper`}
-              </div>
-            )}
 
             {/* Batch import form */}
             {mode === 'import' && (
@@ -1170,47 +1227,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
               ))}
             </div>
 
-            {/* Citations list */}
-            <div className="wl-section">
-              <h4
-                className="wl-collapsible-header"
-                onClick={() => setCitationsOpen(prev => !prev)}
-              >
-                <span className={`wl-collapse-chevron ${citationsOpen ? 'open' : ''}`}>{'\u25B6'}</span>
-                Citations ({citations.length})
-              </h4>
-              {citationsOpen && (
-                <>
-                  {citations.length === 0 && (
-                    <p className="muted">Switch to "Add Citation" mode and click two papers to link them.</p>
-                  )}
-                  <div className="wl-citation-list">
-                    {citations.map(c => {
-                      const citing = papers.find(p => p.id === c.citing_paper_id);
-                      const cited = papers.find(p => p.id === c.cited_paper_id);
-                      if (!citing || !cited) return null;
-                      return (
-                        <div key={c.id} className="wl-citation-item">
-                          <span className="wl-citation-text">
-                            {getFirstAuthor(citing)} ({getYear(citing)})
-                            {' \u2192 '}
-                            {getFirstAuthor(cited)} ({getYear(cited)})
-                          </span>
-                          <button
-                            className="btn-icon btn-danger-icon"
-                            onClick={() => handleRemoveCitation(c.citing_paper_id, c.cited_paper_id)}
-                            title="Remove citation"
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
             {/* Paper list for reference */}
             <div className="wl-section">
               <h4
@@ -1231,10 +1247,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh }: 
                         <div
                           key={p.id}
                           className={`wl-paper-item ${isSelected ? 'selected' : ''}`}
-                          onClick={() => {
-                            if (mode === 'cite') handleCiteClick(p.id);
-                            else toggleSelection(p.id);
-                          }}
+                          onClick={() => toggleSelection(p.id)}
                           onMouseEnter={() => setHoveredPaperId(p.id)}
                           onMouseLeave={() => setHoveredPaperId(null)}
                         >
