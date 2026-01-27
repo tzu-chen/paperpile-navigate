@@ -64,10 +64,21 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const [importWlMode, setImportWlMode] = useState<'new' | 'existing'>('new');
   const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
-  // Visibility toggles
-  const [showCitations, setShowCitations] = useState(true);
-  const [showWorldlines, setShowWorldlines] = useState(true);
-  const [showNonWorldlinePapers, setShowNonWorldlinePapers] = useState(true);
+  // Visibility toggles (persisted to localStorage)
+  const [showCitations, setShowCitations] = useState<boolean>(() => {
+    try { const s = localStorage.getItem('paperpile-worldline-visibility'); if (s) { const v = JSON.parse(s); return v.showCitations ?? true; } } catch {} return true;
+  });
+  const [showWorldlines, setShowWorldlines] = useState<boolean>(() => {
+    try { const s = localStorage.getItem('paperpile-worldline-visibility'); if (s) { const v = JSON.parse(s); return v.showWorldlines ?? true; } } catch {} return true;
+  });
+  const [showNonWorldlinePapers, setShowNonWorldlinePapers] = useState<boolean>(() => {
+    try { const s = localStorage.getItem('paperpile-worldline-visibility'); if (s) { const v = JSON.parse(s); return v.showNonWorldlinePapers ?? true; } } catch {} return true;
+  });
+
+  // Persist visibility toggles
+  useEffect(() => {
+    localStorage.setItem('paperpile-worldline-visibility', JSON.stringify({ showCitations, showWorldlines, showNonWorldlinePapers }));
+  }, [showCitations, showWorldlines, showNonWorldlinePapers]);
 
   // Collapsible sections
   const [allPapersOpen, setAllPapersOpen] = useState(true);
