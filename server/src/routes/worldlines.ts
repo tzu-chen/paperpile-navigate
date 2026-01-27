@@ -161,10 +161,31 @@ router.post('/batch-import', async (req: Request, res: Response) => {
     let citationsCreated = 0;
     const batchArxivIds = new Set(paperMap.keys());
 
-    for (const arxivId of batchArxivIds) {
+    // Helper: strip version suffix from ArXiv IDs (e.g. "2301.00001v2" -> "2301.00001")
+    const stripVersion = (id: string) => id.replace(/v\d+$/, '');
+
+    // Helper: fetch with retry on 429 rate-limit responses
+    const fetchWithRetry = async (url: string, retries = 3): Promise<globalThis.Response> => {
+      const res = await fetch(url);
+      if (res.status === 429 && retries > 0) {
+        const retryAfter = parseInt(res.headers.get('retry-after') || '2', 10);
+        await new Promise(r => setTimeout(r, retryAfter * 1000));
+        return fetchWithRetry(url, retries - 1);
+      }
+      return res;
+    };
+
+    const batchIds = [...batchArxivIds];
+    for (let idx = 0; idx < batchIds.length; idx++) {
+      const arxivId = batchIds[idx];
       const paperId = paperMap.get(arxivId)!;
       try {
-        const s2Res = await fetch(
+        // Rate-limit: wait 1s between Semantic Scholar requests (free tier ≈ 1 req/s)
+        if (idx > 0) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        const s2Res = await fetchWithRetry(
           `${S2_API_BASE}/ARXIV:${arxivId}/references?fields=externalIds&limit=500`
         );
         if (!s2Res.ok) continue;
@@ -172,14 +193,15 @@ router.post('/batch-import', async (req: Request, res: Response) => {
         const refs = s2Data.data || [];
 
         for (const ref of refs) {
-          const refArxivId = ref.citedPaper?.externalIds?.ArXiv;
-          if (refArxivId && batchArxivIds.has(refArxivId) && refArxivId !== arxivId) {
+          const rawRefArxivId = ref.citedPaper?.externalIds?.ArXiv;
+          if (!rawRefArxivId) continue;
+          // Normalize: strip version suffix so it matches our cleaned batch set
+          const refArxivId = stripVersion(rawRefArxivId);
+          if (batchArxivIds.has(refArxivId) && refArxivId !== arxivId) {
             const citedPaperId = paperMap.get(refArxivId)!;
-            try {
-              db.addCitation(paperId, citedPaperId);
+            const result = db.addCitation(paperId, citedPaperId);
+            if (result.changes > 0) {
               citationsCreated++;
-            } catch {
-              // duplicate citation — ignore
             }
           }
         }
