@@ -6,6 +6,7 @@ import CommentPanel from './CommentPanel';
 import TagPanel from './TagPanel';
 import ExportPanel from './ExportPanel';
 import ChatPanel from './ChatPanel';
+import LaTeX from './LaTeX';
 
 interface Props {
   paper: SavedPaper;
@@ -55,7 +56,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
     <div className="paper-viewer">
       <div className="viewer-header">
         <div className="viewer-title-row">
-          <h2>{paper.title}</h2>
+          <h2><LaTeX>{paper.title}</LaTeX></h2>
           <a
             href={paper.abs_url}
             target="_blank"
@@ -177,7 +178,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
               <div className="info-panel">
                 <div className="info-section">
                   <h4>Abstract</h4>
-                  <p>{paper.summary}</p>
+                  <p><LaTeX>{paper.summary}</LaTeX></p>
                 </div>
                 <div className="info-section">
                   <h4>Authors</h4>

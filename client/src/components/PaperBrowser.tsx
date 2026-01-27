@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArxivPaper, CategoryGroup } from '../types';
 import * as api from '../services/api';
+import LaTeX from './LaTeX';
 
 interface Props {
   onSavePaper: (paper: ArxivPaper) => Promise<any>;
@@ -155,7 +156,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
             <div key={paper.id} className="paper-card">
               <div className="paper-card-header">
                 <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
-                  {paper.title}
+                  <LaTeX>{paper.title}</LaTeX>
                 </h3>
                 <div className="paper-actions">
                   {isSaved ? (
@@ -207,7 +208,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
               </div>
 
               <p className={`paper-abstract ${isExpanded ? 'expanded' : ''}`}>
-                {paper.summary}
+                <LaTeX>{paper.summary}</LaTeX>
               </p>
               {paper.summary.length > 300 && (
                 <button
