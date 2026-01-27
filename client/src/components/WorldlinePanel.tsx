@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
 import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult } from '../types';
 import * as api from '../services/api';
-import { computeUmapPositions } from '../services/embedding';
+import { computeEmbeddingPositions } from '../services/embedding';
 import LaTeX from './LaTeX';
 
 interface Props {
@@ -103,17 +103,17 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     citationsRef.current = citations;
   }, [citations]);
 
-  // Compute paper positions: x via UMAP embedding of paper text, y is time
+  // Compute paper positions: x via PCA embedding of paper text, y is time
   const paperPositions = useMemo(() => {
     if (papers.length === 0) return new Map<number, { x: number; y: number }>();
 
-    // UMAP 1D embedding for x-axis (topic similarity)
-    const umapX = computeUmapPositions(papers);
+    // PCA 1D embedding for x-axis (topic similarity)
+    const embeddingX = computeEmbeddingPositions(papers);
 
     const positions = new Map<number, { x: number; y: number }>();
     papers.forEach(p => {
       positions.set(p.id, {
-        x: umapX.get(p.id) ?? 0.5,
+        x: embeddingX.get(p.id) ?? 0.5,
         y: new Date(p.published).getTime(),
       });
     });
@@ -202,7 +202,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .call(d3.axisBottom(xScale).ticks(0))
       .attr('class', 'wl-axis');
 
-    // X-axis label (UMAP topic similarity)
+    // X-axis label (PCA topic similarity)
     g.append('text')
       .attr('x', innerW / 2)
       .attr('y', innerH + 30)
