@@ -23,11 +23,13 @@ interface Props {
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
   onOpenPaper: (paper: SavedPaper) => void;
+  browsePapers?: ArxivPaper[];
+  onBrowseNavigate?: (paper: ArxivPaper) => void;
 }
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, onBrowseNavigate }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -42,6 +44,14 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
   const categories = saved ? JSON.parse(saved.categories) as string[] : (paper as ArxivPaper).categories;
   const doi = saved ? saved.doi : (paper as ArxivPaper).doi || null;
   const journalRef = saved ? saved.journal_ref : (paper as ArxivPaper).journalRef || null;
+
+  // Browse navigation
+  const browseIndex = browsePapers && browsePapers.length > 0
+    ? browsePapers.findIndex(p => p.id === arxivId)
+    : -1;
+  const canBrowseNav = browseIndex >= 0 && onBrowseNavigate;
+  const hasPrev = canBrowseNav && browseIndex > 0;
+  const hasNext = canBrowseNav && browseIndex < browsePapers!.length - 1;
 
   const loadComments = useCallback(async () => {
     const s = isSavedPaper(paper) ? paper : null;
@@ -82,36 +92,61 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
       <div className="viewer-header">
         <div className="viewer-title-row">
           <h2><LaTeX>{paper.title}</LaTeX></h2>
-          <a
-            href={absUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-secondary btn-sm"
-          >
-            ArXiv Page
-          </a>
-          {isInLibrary ? (
-            <button className="btn btn-success btn-sm" disabled>
-              In Library
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={async () => {
-                if (onSavePaper) {
-                  setSaving(true);
-                  try {
-                    await onSavePaper();
-                  } finally {
-                    setSaving(false);
-                  }
-                }
-              }}
-              disabled={saving}
+          <div className="viewer-title-actions">
+            {canBrowseNav && (
+              <div className="browse-nav">
+                <button
+                  className="btn btn-secondary btn-sm browse-nav-btn"
+                  disabled={!hasPrev}
+                  onClick={() => hasPrev && onBrowseNavigate!(browsePapers![browseIndex - 1])}
+                  title="Previous paper in browse list"
+                >
+                  &#8592; Prev
+                </button>
+                <span className="browse-nav-index">
+                  {browseIndex + 1}/{browsePapers!.length}
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm browse-nav-btn"
+                  disabled={!hasNext}
+                  onClick={() => hasNext && onBrowseNavigate!(browsePapers![browseIndex + 1])}
+                  title="Next paper in browse list"
+                >
+                  Next &#8594;
+                </button>
+              </div>
+            )}
+            <a
+              href={absUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary btn-sm"
             >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          )}
+              ArXiv Page
+            </a>
+            {isInLibrary ? (
+              <button className="btn btn-success btn-sm" disabled>
+                In Library
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={async () => {
+                  if (onSavePaper) {
+                    setSaving(true);
+                    try {
+                      await onSavePaper();
+                    } finally {
+                      setSaving(false);
+                    }
+                  }
+                }}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="viewer-meta">
           <span className="paper-authors">

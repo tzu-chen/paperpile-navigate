@@ -9,6 +9,7 @@ interface Props {
   savedPaperIds: Set<string>;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
+  onPapersLoaded?: (papers: ArxivPaper[]) => void;
 }
 
 const SORT_OPTIONS = [
@@ -17,7 +18,7 @@ const SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevance' },
 ];
 
-export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor }: Props) {
+export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor, onPapersLoaded }: Props) {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState(
     () => localStorage.getItem('paperpile-navigate-category') || 'cs.AI'
@@ -82,6 +83,10 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
     return () => controller.abort();
   }, [papers]);
+
+  useEffect(() => {
+    onPapersLoaded?.(papers);
+  }, [papers, onPapersLoaded]);
 
   async function performSearch(startPage: number) {
     setLoading(true);
