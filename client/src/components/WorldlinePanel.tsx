@@ -15,8 +15,6 @@ interface WorldlineWithPapers extends Worldline {
   paperIds: Set<number>;
 }
 
-type InteractionMode = 'select' | 'view';
-
 export default function WorldlinePanel({ papers, showNotification, onRefresh, onOpenPaper }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +24,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
   const [hoveredPaperId, setHoveredPaperId] = useState<number | null>(null);
   const [activeWorldlineId, setActiveWorldlineId] = useState<number | null>(null);
-  const [mode, setMode] = useState<InteractionMode>('select');
 
   // Refs for right-click drag citation
   const dragSrcRef = useRef<number | null>(null);
@@ -825,57 +822,37 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         {/* Sidebar */}
         {sidebarOpen && (
           <div className="wl-sidebar">
-            {/* Mode selector */}
-            <div className="wl-mode-bar">
-              <button
-                className={`btn btn-sm ${mode === 'select' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setMode('select')}
-              >
-                Select
-              </button>
-              <button
-                className={`btn btn-sm ${mode === 'view' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setMode('view')}
-                title="Visibility settings"
-              >
-                View
-              </button>
+            {/* Visibility toggles */}
+            <div className="wl-section">
+              <h4>Visibility</h4>
+              <label className="wl-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={showCitations}
+                  onChange={() => setShowCitations(v => !v)}
+                />
+                <span>Citation Arrows</span>
+              </label>
+              <label className="wl-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={showWorldlines}
+                  onChange={() => setShowWorldlines(v => !v)}
+                />
+                <span>Worldline Paths</span>
+              </label>
+              <label className="wl-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={showNonWorldlinePapers}
+                  onChange={() => setShowNonWorldlinePapers(v => !v)}
+                />
+                <span>Unassigned Papers</span>
+              </label>
             </div>
 
-            {/* Visibility toggles */}
-            {mode === 'view' && (
-              <div className="wl-section wl-view-section">
-                <h4>Visibility</h4>
-                <label className="wl-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={showCitations}
-                    onChange={() => setShowCitations(v => !v)}
-                  />
-                  <span>Citation Arrows</span>
-                </label>
-                <label className="wl-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={showWorldlines}
-                    onChange={() => setShowWorldlines(v => !v)}
-                  />
-                  <span>Worldline Paths</span>
-                </label>
-                <label className="wl-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={showNonWorldlinePapers}
-                    onChange={() => setShowNonWorldlinePapers(v => !v)}
-                  />
-                  <span>Unassigned Papers</span>
-                </label>
-              </div>
-            )}
-
             {/* Selected papers */}
-            {mode === 'select' && (
-              <div className="wl-section">
+            <div className="wl-section">
                 <div className="wl-section-header">
                   <h4>Selected ({selectedPaperIds.size})</h4>
                   {selectedPaperIds.size > 0 && (
@@ -950,7 +927,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                   </div>
                 )}
               </div>
-            )}
 
             {/* Citations Discovery Panel */}
             {selectedPaperIds.size === 1 && (() => {
