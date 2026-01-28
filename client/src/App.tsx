@@ -19,6 +19,8 @@ export default function App() {
   const [selectedPaper, setSelectedPaper] = useState<SavedPaper | null>(null);
   const [previewPaper, setPreviewPaper] = useState<ArxivPaper | null>(null);
   const [browsePapers, setBrowsePapers] = useState<ArxivPaper[]>([]);
+  const [browsePageOffset, setBrowsePageOffset] = useState(0);
+  const [browseTotalResults, setBrowseTotalResults] = useState(0);
   const [notification, setNotification] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -209,7 +211,11 @@ export default function App() {
             savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
-            onPapersLoaded={setBrowsePapers}
+            onPapersLoaded={(papers, pageOffset, totalResults) => {
+              setBrowsePapers(papers);
+              setBrowsePageOffset(pageOffset);
+              setBrowseTotalResults(totalResults);
+            }}
           />
         )}
         {viewMode === 'library' && (
@@ -260,6 +266,8 @@ export default function App() {
             onFavoriteAuthor={handleFavoriteAuthor}
             onOpenPaper={handleOpenPaper}
             browsePapers={browsePapers}
+            browsePageOffset={browsePageOffset}
+            browseTotalResults={browseTotalResults}
             onBrowseNavigate={handleBrowseNavigate}
           />
         )}

@@ -24,7 +24,7 @@ router.get('/search', async (req: Request, res: Response) => {
       category,
       query,
       start: parseInt(start, 10),
-      maxResults: Math.min(parseInt(maxResults, 10), 50),
+      maxResults: Math.min(parseInt(maxResults, 10), 200),
       sortBy: sortBy as 'relevance' | 'lastUpdatedDate' | 'submittedDate',
     });
 
