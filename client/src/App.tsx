@@ -17,6 +17,7 @@ export default function App() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [favoriteAuthors, setFavoriteAuthors] = useState<FavoriteAuthor[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<SavedPaper | null>(null);
+  const [previewPaper, setPreviewPaper] = useState<ArxivPaper | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -89,19 +90,33 @@ export default function App() {
     setViewMode('viewer');
   };
 
-  const handleOpenArxivPaper = async (paper: ArxivPaper) => {
+  const handleOpenArxivPaper = (paper: ArxivPaper) => {
+    const existing = savedPapers.find(p => p.arxiv_id === paper.id);
+    if (existing) {
+      setSelectedPaper(existing);
+      setPreviewPaper(null);
+    } else {
+      setPreviewPaper(paper);
+      setSelectedPaper(null);
+    }
+    setViewMode('viewer');
+  };
+
+  const handleSaveFromViewer = async (paper: ArxivPaper) => {
     try {
       const saved = await api.savePaper(paper);
       await loadLibrary();
       setSelectedPaper(saved);
-      setViewMode('viewer');
+      setPreviewPaper(null);
+      showNotification(`Saved "${saved.title}" to library`);
     } catch (err) {
-      showNotification('Failed to open paper');
+      showNotification('Failed to save paper');
     }
   };
 
   const handleBackFromViewer = () => {
     setSelectedPaper(null);
+    setPreviewPaper(null);
     setViewMode('library');
     loadLibrary();
   };
@@ -215,9 +230,11 @@ export default function App() {
             showNotification={showNotification}
           />
         )}
-        {viewMode === 'viewer' && selectedPaper && (
+        {viewMode === 'viewer' && (selectedPaper || previewPaper) && (
           <PaperViewer
-            paper={selectedPaper}
+            paper={(selectedPaper || previewPaper)!}
+            isInLibrary={!!selectedPaper}
+            onSavePaper={previewPaper ? async () => { await handleSaveFromViewer(previewPaper); } : undefined}
             allTags={tags}
             onTagsChanged={loadLibrary}
             showNotification={showNotification}
