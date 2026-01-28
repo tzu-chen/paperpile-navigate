@@ -275,23 +275,32 @@ export async function removeWorldlinePaper(worldlineId: number, paperId: number)
   await request(`/worldlines/${worldlineId}/papers/${paperId}`, { method: 'DELETE' });
 }
 
-// Batch Import Worldline
-export async function batchImportWorldline(
+// Batch Import
+export async function batchImport(
   arxivIds: string[],
-  worldline: { name: string; color?: string } | { id: number }
+  options?: {
+    worldline?: { name: string; color?: string } | { id: number };
+    tagIds?: number[];
+  }
 ): Promise<{
   success: boolean;
   papers_added: number;
   citations_created: number;
-  worldline_id: number;
+  worldline_id: number | null;
+  tags_applied: number;
   errors: string[];
 }> {
   const body: Record<string, unknown> = { arxiv_ids: arxivIds };
-  if ('id' in worldline) {
-    body.worldline_id = worldline.id;
-  } else {
-    body.worldline_name = worldline.name;
-    body.worldline_color = worldline.color;
+  if (options?.worldline) {
+    if ('id' in options.worldline) {
+      body.worldline_id = options.worldline.id;
+    } else {
+      body.worldline_name = options.worldline.name;
+      body.worldline_color = options.worldline.color;
+    }
+  }
+  if (options?.tagIds && options.tagIds.length > 0) {
+    body.tag_ids = options.tagIds;
   }
   return request('/worldlines/batch-import', {
     method: 'POST',

@@ -588,6 +588,139 @@ input[type="color"] {
 }
 
 /* ========================
+   Batch Import (Library)
+   ======================== */
+.batch-import-section {
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.batch-import-section h3 {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.batch-import-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.batch-import-body {
+  display: flex;
+  gap: 16px;
+}
+
+.batch-import-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.batch-import-textarea {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font-mono, 'SFMono-Regular', 'Consolas', monospace);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.batch-import-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.batch-import-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.batch-import-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batch-import-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batch-import-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.batch-import-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.batch-import-wl-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.batch-import-wl-toggle .btn {
+  flex: 1;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.batch-import-wl-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.batch-import-wl-form input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.batch-import-wl-select {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.batch-import-wl-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.batch-import-submit {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.batch-import-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+/* ========================
    Paper Viewer
    ======================== */
 .paper-viewer {

@@ -138,16 +138,13 @@ router.post('/citations/import', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/worldlines/batch-import — batch import papers, infer citations, create or add to worldline
+// POST /api/worldlines/batch-import — batch import papers, optionally infer citations, assign to worldline and/or tags
 router.post('/batch-import', async (req: Request, res: Response) => {
   try {
-    const { arxiv_ids, worldline_name, worldline_color, worldline_id } = req.body;
+    const { arxiv_ids, worldline_name, worldline_color, worldline_id, tag_ids } = req.body;
 
     if (!arxiv_ids || !Array.isArray(arxiv_ids) || arxiv_ids.length === 0) {
       return res.status(400).json({ error: 'arxiv_ids array is required' });
-    }
-    if (!worldline_id && (!worldline_name || !worldline_name.trim())) {
-      return res.status(400).json({ error: 'worldline_name or worldline_id is required' });
     }
 
     // Normalize IDs: strip version suffixes (e.g. "2301.00001v1" -> "2301.00001")
@@ -248,28 +245,45 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       }
     }
 
-    // Step 3: Create new worldline or use existing one
-    let targetWorldlineId: number;
+    // Step 3: Optionally create/assign worldline
+    let targetWorldlineId: number | null = null;
     if (worldline_id) {
       targetWorldlineId = worldline_id;
-    } else {
+    } else if (worldline_name && worldline_name.trim()) {
       const wlResult = db.createWorldline(worldline_name.trim(), worldline_color || '#6366f1');
       targetWorldlineId = wlResult.lastInsertRowid as number;
     }
 
-    // Get existing paper count for position offset when adding to existing worldline
-    const existingPapers = worldline_id ? db.getWorldlinePapers(targetWorldlineId) : [];
-    const positionOffset = existingPapers.length;
+    if (targetWorldlineId !== null) {
+      // Get existing paper count for position offset when adding to existing worldline
+      const existingPapers = worldline_id ? db.getWorldlinePapers(targetWorldlineId) : [];
+      const positionOffset = existingPapers.length;
 
-    // Add papers sorted by publication date
-    const sortedPapers = savedPapers.sort(
-      (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
-    );
-    for (let i = 0; i < sortedPapers.length; i++) {
-      try {
-        db.addWorldlinePaper(targetWorldlineId, sortedPapers[i].id, positionOffset + i);
-      } catch {
-        // paper may already be in worldline — ignore
+      // Add papers sorted by publication date
+      const sortedPapers = savedPapers.sort(
+        (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
+      );
+      for (let i = 0; i < sortedPapers.length; i++) {
+        try {
+          db.addWorldlinePaper(targetWorldlineId, sortedPapers[i].id, positionOffset + i);
+        } catch {
+          // paper may already be in worldline — ignore
+        }
+      }
+    }
+
+    // Step 4: Optionally apply tags to all imported papers
+    let tagsApplied = 0;
+    if (tag_ids && Array.isArray(tag_ids) && tag_ids.length > 0) {
+      for (const paper of savedPapers) {
+        for (const tagId of tag_ids) {
+          try {
+            db.addPaperTag(paper.id, tagId);
+            tagsApplied++;
+          } catch {
+            // tag may already be applied — ignore
+          }
+        }
       }
     }
 
@@ -278,6 +292,7 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       papers_added: savedPapers.length,
       citations_created: citationsCreated,
       worldline_id: targetWorldlineId,
+      tags_applied: tagsApplied,
       errors,
     });
   } catch (error) {

@@ -15,7 +15,7 @@ interface WorldlineWithPapers extends Worldline {
   paperIds: Set<number>;
 }
 
-type InteractionMode = 'select' | 'import' | 'view';
+type InteractionMode = 'select' | 'view';
 
 export default function WorldlinePanel({ papers, showNotification, onRefresh, onOpenPaper }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -54,15 +54,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const [discoverySearch, setDiscoverySearch] = useState('');
   const [discoveryPage, setDiscoveryPage] = useState(0);
   const DISCOVERY_PAGE_SIZE = 10;
-
-  // Batch import form
-  const [importArxivIds, setImportArxivIds] = useState('');
-  const [importWlName, setImportWlName] = useState('');
-  const [importWlColor, setImportWlColor] = useState('#6366f1');
-  const [importLoading, setImportLoading] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [importWlMode, setImportWlMode] = useState<'new' | 'existing'>('new');
-  const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
 
   // Visibility toggles (persisted to localStorage)
   const [showCitations, setShowCitations] = useState<boolean>(() => {
@@ -766,59 +757,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     return papers.some(p => p.arxiv_id === arxivId);
   }, [papers]);
 
-  // Batch import: save papers, infer citations, create or add to worldline
-  const handleBatchImport = async () => {
-    const ids = importArxivIds
-      .split(/[\n,]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-    if (ids.length === 0) {
-      showNotification('Enter at least one ArXiv ID');
-      return;
-    }
-    if (importWlMode === 'new' && !importWlName.trim()) {
-      showNotification('Enter a worldline name');
-      return;
-    }
-    if (importWlMode === 'existing' && importExistingWlId === null) {
-      showNotification('Select an existing worldline');
-      return;
-    }
-
-    setImportLoading(true);
-    setImportStatus(`Importing ${ids.length} papers and inferring citations...`);
-    try {
-      const wlArg = importWlMode === 'existing'
-        ? { id: importExistingWlId! }
-        : { name: importWlName.trim(), color: importWlColor };
-      const result = await api.batchImportWorldline(ids, wlArg);
-      const parts: string[] = [];
-      parts.push(`${result.papers_added} papers added`);
-      parts.push(`${result.citations_created} citations inferred`);
-      if (result.errors.length > 0) {
-        parts.push(`${result.errors.length} errors`);
-      }
-      setImportStatus(`Done: ${parts.join(', ')}`);
-      const wlLabel = importWlMode === 'existing'
-        ? worldlines.find(w => w.id === importExistingWlId)?.name || 'worldline'
-        : importWlName.trim();
-      if (result.errors.length > 0) {
-        showNotification(`Import finished with errors: ${result.errors.join('; ')}`);
-      } else {
-        showNotification(`Worldline "${wlLabel}" — ${result.papers_added} papers, ${result.citations_created} citations`);
-      }
-      setImportArxivIds('');
-      setImportWlName('');
-      await onRefresh();
-      await loadData();
-    } catch (err: any) {
-      setImportStatus(null);
-      showNotification(err.message || 'Batch import failed');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
   // Get short first author name
   const getFirstAuthor = (p: SavedPaper): string => {
     try {
@@ -896,13 +834,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 Select
               </button>
               <button
-                className={`btn btn-sm ${mode === 'import' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setMode('import')}
-                title="Batch import ArXiv papers into a worldline"
-              >
-                Import
-              </button>
-              <button
                 className={`btn btn-sm ${mode === 'view' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setMode('view')}
                 title="Visibility settings"
@@ -910,98 +841,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 View
               </button>
             </div>
-
-            {/* Batch import form */}
-            {mode === 'import' && (
-              <div className="wl-section wl-import-section">
-                <h4>Batch Import Worldline</h4>
-                <p className="wl-import-hint">
-                  Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library with citations inferred from Semantic Scholar.
-                </p>
-                <textarea
-                  className="wl-import-textarea"
-                  placeholder={"2301.00001\n2302.12345\n2303.54321"}
-                  value={importArxivIds}
-                  onChange={e => setImportArxivIds(e.target.value)}
-                  rows={6}
-                  disabled={importLoading}
-                />
-
-                <div className="wl-import-wl-toggle">
-                  <button
-                    className={`btn btn-sm ${importWlMode === 'new' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setImportWlMode('new')}
-                    disabled={importLoading}
-                  >
-                    New Worldline
-                  </button>
-                  <button
-                    className={`btn btn-sm ${importWlMode === 'existing' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setImportWlMode('existing')}
-                    disabled={importLoading || worldlines.length === 0}
-                    title={worldlines.length === 0 ? 'No existing worldlines' : ''}
-                  >
-                    Existing
-                  </button>
-                </div>
-
-                {importWlMode === 'new' && (
-                  <div className="wl-import-form-row">
-                    <input
-                      type="text"
-                      className="wl-import-name"
-                      placeholder="Worldline name..."
-                      value={importWlName}
-                      onChange={e => setImportWlName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !importLoading && handleBatchImport()}
-                      disabled={importLoading}
-                    />
-                    <input
-                      type="color"
-                      value={importWlColor}
-                      onChange={e => setImportWlColor(e.target.value)}
-                      disabled={importLoading}
-                    />
-                  </div>
-                )}
-
-                {importWlMode === 'existing' && (
-                  <select
-                    className="wl-import-select"
-                    value={importExistingWlId ?? ''}
-                    onChange={e => setImportExistingWlId(e.target.value ? Number(e.target.value) : null)}
-                    disabled={importLoading}
-                  >
-                    <option value="">Select a worldline...</option>
-                    {worldlines.map(wl => (
-                      <option key={wl.id} value={wl.id}>
-                        {wl.name} ({wl.paperIds.size} papers)
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <button
-                  className="btn btn-primary wl-import-submit"
-                  onClick={handleBatchImport}
-                  disabled={
-                    importLoading ||
-                    !importArxivIds.trim() ||
-                    (importWlMode === 'new' && !importWlName.trim()) ||
-                    (importWlMode === 'existing' && importExistingWlId === null)
-                  }
-                >
-                  {importLoading
-                    ? 'Importing...'
-                    : importWlMode === 'new'
-                      ? 'Create Worldline'
-                      : 'Add to Worldline'}
-                </button>
-                {importStatus && (
-                  <div className="wl-import-status">{importStatus}</div>
-                )}
-              </div>
-            )}
 
             {/* Visibility toggles */}
             {mode === 'view' && (
