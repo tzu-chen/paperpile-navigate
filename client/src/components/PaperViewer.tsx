@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SavedPaper, Comment, Tag } from '../types';
+import { SavedPaper, ArxivPaper, Comment, Tag } from '../types';
 import * as api from '../services/api';
 import PDFViewer from './PDFViewer';
 import CommentPanel from './CommentPanel';
@@ -9,8 +9,14 @@ import ChatPanel from './ChatPanel';
 import WorldlineSidebarPanel from './WorldlineSidebarPanel';
 import LaTeX from './LaTeX';
 
+function isSavedPaper(paper: SavedPaper | ArxivPaper): paper is SavedPaper {
+  return 'arxiv_id' in paper;
+}
+
 interface Props {
-  paper: SavedPaper;
+  paper: SavedPaper | ArxivPaper;
+  isInLibrary: boolean;
+  onSavePaper?: () => Promise<void>;
   allTags: Tag[];
   onTagsChanged: () => Promise<void>;
   showNotification: (msg: string) => void;
@@ -21,38 +27,55 @@ interface Props {
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
-  const [activePanel, setActivePanel] = useState<SidePanel>('comments');
+  const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const authors = JSON.parse(paper.authors) as string[];
-  const categories = JSON.parse(paper.categories) as string[];
+  const saved = isSavedPaper(paper) ? paper : null;
+  const arxivId = saved ? saved.arxiv_id : (paper as ArxivPaper).id;
+  const absUrl = saved ? saved.abs_url : (paper as ArxivPaper).absUrl;
+  const authors = saved ? JSON.parse(saved.authors) as string[] : (paper as ArxivPaper).authors;
+  const categories = saved ? JSON.parse(saved.categories) as string[] : (paper as ArxivPaper).categories;
+  const doi = saved ? saved.doi : (paper as ArxivPaper).doi || null;
+  const journalRef = saved ? saved.journal_ref : (paper as ArxivPaper).journalRef || null;
 
   const loadComments = useCallback(async () => {
+    const s = isSavedPaper(paper) ? paper : null;
+    if (!s) return;
     try {
-      const data = await api.getComments(paper.id);
+      const data = await api.getComments(s.id);
       setComments(data);
     } catch (err) {
       console.error('Failed to load comments:', err);
     }
-  }, [paper.id]);
+  }, [paper]);
 
   const loadPaperTags = useCallback(async () => {
+    const s = isSavedPaper(paper) ? paper : null;
+    if (!s) return;
     try {
-      const data = await api.getPaperTags(paper.id);
+      const data = await api.getPaperTags(s.id);
       setPaperTags(data);
     } catch (err) {
       console.error('Failed to load tags:', err);
     }
-  }, [paper.id]);
+  }, [paper]);
 
   useEffect(() => {
     loadComments();
     loadPaperTags();
   }, [loadComments, loadPaperTags]);
+
+  // When paper transitions from unsaved to saved, switch to comments tab
+  useEffect(() => {
+    if (isSavedPaper(paper)) {
+      setActivePanel(prev => prev === 'info' ? 'comments' : prev);
+    }
+  }, [paper]);
 
   return (
     <div className="paper-viewer">
@@ -60,13 +83,35 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
         <div className="viewer-title-row">
           <h2><LaTeX>{paper.title}</LaTeX></h2>
           <a
-            href={paper.abs_url}
+            href={absUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-secondary btn-sm"
           >
             ArXiv Page
           </a>
+          {isInLibrary ? (
+            <button className="btn btn-success btn-sm" disabled>
+              In Library
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={async () => {
+                if (onSavePaper) {
+                  setSaving(true);
+                  try {
+                    await onSavePaper();
+                  } finally {
+                    setSaving(false);
+                  }
+                }
+              }}
+              disabled={saving}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
         </div>
         <div className="viewer-meta">
           <span className="paper-authors">
@@ -98,7 +143,7 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
       <div className="viewer-body">
         <div className="viewer-pdf">
           <PDFViewer
-            pdfUrl={api.getPdfProxyUrl(paper.arxiv_id)}
+            pdfUrl={api.getPdfProxyUrl(arxivId)}
             onPageChange={setCurrentPage}
           />
         </div>
@@ -113,48 +158,48 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
 
         {sidebarVisible && <div className="viewer-sidebar">
           <div className="sidebar-tabs">
-            <button
+            {saved && <button
               className={`sidebar-tab ${activePanel === 'chat' ? 'active' : ''}`}
               onClick={() => setActivePanel('chat')}
             >
               Chat
-            </button>
-            <button
+            </button>}
+            {saved && <button
               className={`sidebar-tab ${activePanel === 'comments' ? 'active' : ''}`}
               onClick={() => setActivePanel('comments')}
             >
               Comments ({comments.length})
-            </button>
-            <button
+            </button>}
+            {saved && <button
               className={`sidebar-tab ${activePanel === 'export' ? 'active' : ''}`}
               onClick={() => setActivePanel('export')}
             >
               Export
-            </button>
+            </button>}
             <button
               className={`sidebar-tab ${activePanel === 'info' ? 'active' : ''}`}
               onClick={() => setActivePanel('info')}
             >
               Info
             </button>
-            <button
+            {saved && <button
               className={`sidebar-tab ${activePanel === 'worldline' ? 'active' : ''}`}
               onClick={() => setActivePanel('worldline')}
             >
               Worldline
-            </button>
+            </button>}
           </div>
 
           <div className={`sidebar-content ${activePanel === 'chat' ? 'sidebar-content-chat' : ''}`}>
-            {activePanel === 'chat' && (
+            {activePanel === 'chat' && saved && (
               <ChatPanel
-                paper={paper}
+                paper={saved}
                 showNotification={showNotification}
               />
             )}
-            {activePanel === 'comments' && (
+            {activePanel === 'comments' && saved && (
               <CommentPanel
-                paperId={paper.id}
+                paperId={saved.id}
                 comments={comments}
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
@@ -162,24 +207,26 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 showNotification={showNotification}
               />
             )}
-            {activePanel === 'export' && (
+            {activePanel === 'export' && saved && (
               <ExportPanel
-                paper={paper}
+                paper={saved}
                 showNotification={showNotification}
               />
             )}
             {activePanel === 'info' && (
               <div className="info-panel">
-                <div className="info-section">
-                  <h4>Tags</h4>
-                  <TagPanel
-                    paperId={paper.id}
-                    paperTags={paperTags}
-                    allTags={allTags}
-                    onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
-                    showNotification={showNotification}
-                  />
-                </div>
+                {saved && (
+                  <div className="info-section">
+                    <h4>Tags</h4>
+                    <TagPanel
+                      paperId={saved.id}
+                      paperTags={paperTags}
+                      allTags={allTags}
+                      onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
+                      showNotification={showNotification}
+                    />
+                  </div>
+                )}
                 <div className="info-section">
                   <h4>Abstract</h4>
                   <p><LaTeX>{paper.summary}</LaTeX></p>
@@ -207,18 +254,18 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 </div>
                 <div className="info-section">
                   <h4>ArXiv ID</h4>
-                  <p>{paper.arxiv_id}</p>
+                  <p>{arxivId}</p>
                 </div>
-                {paper.doi && (
+                {doi && (
                   <div className="info-section">
                     <h4>DOI</h4>
-                    <p>{paper.doi}</p>
+                    <p>{doi}</p>
                   </div>
                 )}
-                {paper.journal_ref && (
+                {journalRef && (
                   <div className="info-section">
                     <h4>Journal</h4>
-                    <p>{paper.journal_ref}</p>
+                    <p>{journalRef}</p>
                   </div>
                 )}
                 <div className="info-section">
@@ -231,9 +278,9 @@ export default function PaperViewer({ paper, allTags, onTagsChanged, showNotific
                 </div>
               </div>
             )}
-            {activePanel === 'worldline' && (
+            {activePanel === 'worldline' && saved && (
               <WorldlineSidebarPanel
-                paper={paper}
+                paper={saved}
                 onOpenPaper={onOpenPaper}
                 showNotification={showNotification}
               />
