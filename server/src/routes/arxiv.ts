@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { searchArxiv, getArxivPaper } from '../services/arxiv';
+import { searchArxiv, getArxivPaper, fetchLatestArxiv } from '../services/arxiv';
 import { ARXIV_CATEGORY_GROUPS } from '../types';
 
 const router = Router();
@@ -24,7 +24,7 @@ router.get('/search', async (req: Request, res: Response) => {
       category,
       query,
       start: parseInt(start, 10),
-      maxResults: Math.min(parseInt(maxResults, 10), 200),
+      maxResults: Math.min(parseInt(maxResults, 10), 50),
       sortBy: sortBy as 'relevance' | 'lastUpdatedDate' | 'submittedDate',
     });
 
@@ -32,6 +32,18 @@ router.get('/search', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('ArXiv search error:', error);
     res.status(500).json({ error: 'Failed to search ArXiv' });
+  }
+});
+
+// GET /api/arxiv/latest - Get all papers from the latest ArXiv announcement via RSS
+router.get('/latest', async (req: Request, res: Response) => {
+  try {
+    const { category = 'cs.AI' } = req.query as Record<string, string>;
+    const result = await fetchLatestArxiv(category);
+    res.json(result);
+  } catch (error) {
+    console.error('ArXiv latest fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch latest ArXiv papers' });
   }
 });
 

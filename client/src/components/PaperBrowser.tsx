@@ -35,14 +35,21 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const [scanningWorldlines, setScanningWorldlines] = useState(false);
   const similarityAbortRef = useRef<AbortController | null>(null);
 
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE = 20;
+
+  // Whether we're showing the latest announcement (RSS) vs paginated search
+  const isLatestMode = sortBy === 'submittedDate' && !searchQuery;
 
   useEffect(() => {
     api.getCategories().then(setCategoryGroups).catch(console.error);
   }, []);
 
   useEffect(() => {
-    performSearch(0);
+    if (isLatestMode) {
+      fetchLatest();
+    } else {
+      performSearch(0);
+    }
   }, [selectedCategory, sortBy]);
 
   // Compute worldline similarity when papers change
@@ -87,6 +94,20 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   useEffect(() => {
     onPapersLoaded?.(papers, page * PAGE_SIZE, totalResults);
   }, [papers, page, totalResults, onPapersLoaded]);
+
+  async function fetchLatest() {
+    setLoading(true);
+    try {
+      const result = await api.getLatestArxiv(selectedCategory || 'cs.AI');
+      setPapers(result.papers);
+      setTotalResults(result.totalResults);
+      setPage(0);
+    } catch (err) {
+      console.error('Failed to fetch latest:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function performSearch(startPage: number) {
     setLoading(true);
@@ -166,9 +187,17 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                 placeholder="Search within category..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && performSearch(0)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                    else performSearch(0);
+                  }
+                }}
               />
-              <button onClick={() => performSearch(0)} className="btn btn-primary">
+              <button onClick={() => {
+                if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                else performSearch(0);
+              }} className="btn btn-primary">
                 Search
               </button>
             </div>
@@ -304,7 +333,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
         })}
       </div>
 
-      {totalPages > 1 && (
+      {!isLatestMode && totalPages > 1 && (
         <div className="pagination">
           <button
             className="btn btn-secondary"
