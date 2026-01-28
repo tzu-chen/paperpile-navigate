@@ -2306,14 +2306,6 @@ input[type="color"] {
   flex-shrink: 0;
 }
 
-.wl-mode-bar {
-  display: flex;
-  gap: 6px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-}
-
 .wl-cite-hint {
   padding: 8px 14px;
   font-size: 12px;
