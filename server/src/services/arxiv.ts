@@ -114,6 +114,76 @@ export async function searchByAuthor(authorName: string, maxResults: number = 20
   return { papers, totalResults };
 }
 
+interface RssItem {
+  title?: string[];
+  link?: string[];
+  description?: string[];
+  guid?: Array<{ _: string } | string>;
+  category?: string[];
+  pubDate?: string[];
+  'arxiv:announce_type'?: string[];
+  'dc:creator'?: string[];
+}
+
+function parseRssItem(item: RssItem): ArxivPaper | null {
+  const link = item.link?.[0] || '';
+  const idMatch = link.match(/abs\/(.+?)(?:v\d+)?$/);
+  if (!idMatch) return null;
+
+  const id = idMatch[1];
+  const rawDesc = item.description?.[0] || '';
+  // Description format: "arXiv:XXXX Announce Type: new \n Abstract: actual abstract..."
+  const summary = rawDesc.replace(/^arXiv:\S+\s+Announce Type:\s*\S+\s*Abstract:\s*/i, '').trim();
+
+  const rawCreator = item['dc:creator']?.[0] || '';
+  // Authors are comma-separated but may include affiliations in parentheses
+  const authors = rawCreator
+    .split(/,\s*(?![^()]*\))/)
+    .map(a => a.replace(/\s*\(.*?\)\s*/g, '').trim())
+    .filter(Boolean);
+
+  const pubDate = item.pubDate?.[0] || new Date().toISOString();
+  const categories = item.category || [];
+
+  return {
+    id,
+    title: (item.title?.[0] || '').replace(/\s+/g, ' ').trim(),
+    summary: summary.replace(/\s+/g, ' ').trim(),
+    authors,
+    published: new Date(pubDate).toISOString(),
+    updated: new Date(pubDate).toISOString(),
+    categories,
+    pdfUrl: `https://arxiv.org/pdf/${id}`,
+    absUrl: `https://arxiv.org/abs/${id}`,
+  };
+}
+
+export async function fetchLatestArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  const url = `https://rss.arxiv.org/rss/${encodeURIComponent(category)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArXiv RSS error: ${response.status} ${response.statusText}`);
+  }
+
+  const xml = await response.text();
+  const result = await parseStringPromise(xml);
+
+  const channel = result?.rss?.channel?.[0];
+  if (!channel || !channel.item) {
+    return { papers: [], totalResults: 0 };
+  }
+
+  const papers: ArxivPaper[] = [];
+  for (const item of channel.item) {
+    const announceType = item['arxiv:announce_type']?.[0];
+    if (announceType === 'replace') continue; // skip replacements, keep new + cross-listings
+    const paper = parseRssItem(item);
+    if (paper) papers.push(paper);
+  }
+
+  return { papers, totalResults: papers.length };
+}
+
 export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null> {
   const url = `${ARXIV_API_BASE}?id_list=${arxivId}`;
   const response = await fetch(url);
