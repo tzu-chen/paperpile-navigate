@@ -750,6 +750,31 @@ input[type="color"] {
   line-height: 1.4;
 }
 
+.viewer-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.browse-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+}
+
+.browse-nav-btn {
+  white-space: nowrap;
+}
+
+.browse-nav-index {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: center;
+}
+
 .viewer-meta {
   display: flex;
   align-items: center;

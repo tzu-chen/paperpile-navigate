@@ -18,6 +18,7 @@ export default function App() {
   const [favoriteAuthors, setFavoriteAuthors] = useState<FavoriteAuthor[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<SavedPaper | null>(null);
   const [previewPaper, setPreviewPaper] = useState<ArxivPaper | null>(null);
+  const [browsePapers, setBrowsePapers] = useState<ArxivPaper[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -87,10 +88,15 @@ export default function App() {
 
   const handleOpenPaper = (paper: SavedPaper) => {
     setSelectedPaper(paper);
+    setBrowsePapers([]);
     setViewMode('viewer');
   };
 
   const handleOpenArxivPaper = (paper: ArxivPaper) => {
+    // Only keep browse papers context when opening from Browse view
+    if (viewMode !== 'browse') {
+      setBrowsePapers([]);
+    }
     const existing = savedPapers.find(p => p.arxiv_id === paper.id);
     if (existing) {
       setSelectedPaper(existing);
@@ -100,6 +106,17 @@ export default function App() {
       setSelectedPaper(null);
     }
     setViewMode('viewer');
+  };
+
+  const handleBrowseNavigate = (paper: ArxivPaper) => {
+    const existing = savedPapers.find(p => p.arxiv_id === paper.id);
+    if (existing) {
+      setSelectedPaper(existing);
+      setPreviewPaper(null);
+    } else {
+      setPreviewPaper(paper);
+      setSelectedPaper(null);
+    }
   };
 
   const handleSaveFromViewer = async (paper: ArxivPaper) => {
@@ -192,6 +209,7 @@ export default function App() {
             savedPaperIds={new Set(savedPapers.map(p => p.arxiv_id))}
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
+            onPapersLoaded={setBrowsePapers}
           />
         )}
         {viewMode === 'library' && (
@@ -241,6 +259,8 @@ export default function App() {
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
             onOpenPaper={handleOpenPaper}
+            browsePapers={browsePapers}
+            onBrowseNavigate={handleBrowseNavigate}
           />
         )}
       </main>
