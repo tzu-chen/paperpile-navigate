@@ -24,12 +24,14 @@ interface Props {
   onFavoriteAuthor: (name: string) => void;
   onOpenPaper: (paper: SavedPaper) => void;
   browsePapers?: ArxivPaper[];
+  browsePageOffset?: number;
+  browseTotalResults?: number;
   onBrowseNavigate?: (paper: ArxivPaper) => void;
 }
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, onBrowseNavigate }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -104,7 +106,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
                   &#8592; Prev
                 </button>
                 <span className="browse-nav-index">
-                  {browseIndex + 1}/{browsePapers!.length}
+                  {browsePageOffset + browseIndex + 1}/{browseTotalResults || browsePapers!.length}
                 </span>
                 <button
                   className="btn btn-secondary btn-sm browse-nav-btn"

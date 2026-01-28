@@ -9,7 +9,7 @@ interface Props {
   savedPaperIds: Set<string>;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
-  onPapersLoaded?: (papers: ArxivPaper[]) => void;
+  onPapersLoaded?: (papers: ArxivPaper[], pageOffset: number, totalResults: number) => void;
 }
 
 const SORT_OPTIONS = [
@@ -35,7 +35,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const [scanningWorldlines, setScanningWorldlines] = useState(false);
   const similarityAbortRef = useRef<AbortController | null>(null);
 
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     api.getCategories().then(setCategoryGroups).catch(console.error);
@@ -85,8 +85,8 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   }, [papers]);
 
   useEffect(() => {
-    onPapersLoaded?.(papers);
-  }, [papers, onPapersLoaded]);
+    onPapersLoaded?.(papers, page * PAGE_SIZE, totalResults);
+  }, [papers, page, totalResults, onPapersLoaded]);
 
   async function performSearch(startPage: number) {
     setLoading(true);
