@@ -30,11 +30,14 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
+  const [filterWorldline, setFilterWorldline] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#6366f1');
   const [showTagManager, setShowTagManager] = useState(false);
   const [taggedPaperIds, setTaggedPaperIds] = useState<Set<number> | null>(null);
+  const [worldlinePaperIds, setWorldlinePaperIds] = useState<Set<number> | null>(null);
+  const [filterWorldlines, setFilterWorldlines] = useState<Worldline[]>([]);
 
   // Batch import state
   const [showBatchImport, setShowBatchImport] = useState(false);
@@ -60,8 +63,27 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     });
   }, [filterTag, papers]);
 
+  // Load worldlines for filter row
+  useEffect(() => {
+    api.getWorldlines().then(setFilterWorldlines).catch(() => {});
+  }, [papers]);
+
+  // Fetch paper IDs for selected worldline filter
+  useEffect(() => {
+    if (filterWorldline === null) {
+      setWorldlinePaperIds(null);
+      return;
+    }
+    api.getWorldlinePapers(filterWorldline).then(wlPapers => {
+      setWorldlinePaperIds(new Set(wlPapers.map(p => p.id)));
+    }).catch(() => {
+      setWorldlinePaperIds(null);
+    });
+  }, [filterWorldline, papers]);
+
   const filteredPapers = papers.filter(p => {
     if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
+    if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
     if (filterStatus && p.status !== filterStatus) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -261,6 +283,28 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                 onClick={() => setFilterTag(filterTag === tag.id ? null : tag.id)}
               >
                 {tag.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {filterWorldlines.length > 0 && (
+          <div className="tag-filter-row">
+            <span className="filter-row-label">Worldline:</span>
+            <button
+              className={`tag-filter-btn ${!filterWorldline ? 'active' : ''}`}
+              onClick={() => setFilterWorldline(null)}
+            >
+              All
+            </button>
+            {filterWorldlines.map(wl => (
+              <button
+                key={wl.id}
+                className={`tag-filter-btn ${filterWorldline === wl.id ? 'active' : ''}`}
+                style={{ borderColor: wl.color, color: filterWorldline === wl.id ? '#fff' : wl.color, backgroundColor: filterWorldline === wl.id ? wl.color : 'transparent' }}
+                onClick={() => setFilterWorldline(filterWorldline === wl.id ? null : wl.id)}
+              >
+                {wl.name}
               </button>
             ))}
           </div>
