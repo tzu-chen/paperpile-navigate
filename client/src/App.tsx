@@ -62,6 +62,7 @@ export default function App() {
     if (scheme) {
       applyColorScheme(scheme);
     }
+    api.applyCardFontSize(settings.cardFontSize);
   }, []);
 
   const favoriteAuthorNames = new Set(favoriteAuthors.map(a => a.name));

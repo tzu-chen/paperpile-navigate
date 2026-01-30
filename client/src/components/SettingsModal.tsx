@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as api from '../services/api';
+import type { AppSettings } from '../services/api';
 import { COLOR_SCHEMES, applyColorScheme, getSchemeById } from '../colorSchemes';
 
 interface Props {
@@ -12,6 +13,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const [apiKey, setApiKey] = useState('');
   const [colorScheme, setColorScheme] = useState('default-dark');
   const [similarityThreshold, setSimilarityThreshold] = useState(0.15);
+  const [cardFontSize, setCardFontSize] = useState<AppSettings['cardFontSize']>('medium');
   const [verifying, setVerifying] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
@@ -21,6 +23,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
       setApiKey(settings.claudeApiKey);
       setColorScheme(settings.colorScheme);
       setSimilarityThreshold(settings.similarityThreshold);
+      setCardFontSize(settings.cardFontSize);
       setShowKey(false);
     }
   }, [open]);
@@ -36,18 +39,25 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   };
 
   const handleSave = () => {
-    api.saveSettings({ claudeApiKey: apiKey.trim(), colorScheme, similarityThreshold });
+    api.saveSettings({ claudeApiKey: apiKey.trim(), colorScheme, similarityThreshold, cardFontSize });
+    api.applyCardFontSize(cardFontSize);
     showNotification('Settings saved');
     onClose();
   };
 
+  const handleFontSizeChange = (size: AppSettings['cardFontSize']) => {
+    setCardFontSize(size);
+    api.applyCardFontSize(size);
+  };
+
   const handleCancel = () => {
-    // Revert color scheme to saved value
+    // Revert color scheme and font size to saved values
     const settings = api.getSettings();
     const scheme = getSchemeById(settings.colorScheme);
     if (scheme) {
       applyColorScheme(scheme);
     }
+    api.applyCardFontSize(settings.cardFontSize);
     onClose();
   };
 
@@ -75,7 +85,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
 
   const handleClear = () => {
     setApiKey('');
-    api.saveSettings({ claudeApiKey: '', colorScheme, similarityThreshold });
+    api.saveSettings({ claudeApiKey: '', colorScheme, similarityThreshold, cardFontSize });
     showNotification('API key removed');
   };
 
@@ -135,6 +145,26 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
                   </div>
                   <span className="scheme-name">{scheme.name}</span>
                   <span className="scheme-type">{scheme.type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-section" style={{ marginTop: 24 }}>
+            <h3>Card Font Size</h3>
+            <p className="settings-description">
+              Adjust the font size of paper titles and abstracts in browse and library cards.
+            </p>
+
+            <div className="font-size-options">
+              {(['small', 'medium', 'large'] as const).map(size => (
+                <button
+                  key={size}
+                  className={`font-size-option ${cardFontSize === size ? 'active' : ''}`}
+                  onClick={() => handleFontSizeChange(size)}
+                >
+                  <span className="font-size-label">{size.charAt(0).toUpperCase() + size.slice(1)}</span>
+                  <span className={`font-size-preview font-size-preview-${size}`}>Aa</span>
                 </button>
               ))}
             </div>
