@@ -347,12 +347,14 @@ export interface AppSettings {
   claudeApiKey: string;
   colorScheme: string;
   similarityThreshold: number;
+  cardFontSize: 'small' | 'medium' | 'large';
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   claudeApiKey: '',
   colorScheme: 'default-dark',
   similarityThreshold: 0.15,
+  cardFontSize: 'medium',
 };
 
 export function getSettings(): AppSettings {
@@ -365,6 +367,16 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+const FONT_SIZE_SCALES: Record<AppSettings['cardFontSize'], string> = {
+  small: '0.85',
+  medium: '1',
+  large: '1.2',
+};
+
+export function applyCardFontSize(size: AppSettings['cardFontSize']): void {
+  document.documentElement.style.setProperty('--card-font-scale', FONT_SIZE_SCALES[size] || '1');
 }
 
 // Chat History (localStorage)
