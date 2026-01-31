@@ -23,6 +23,7 @@ export default function App() {
   const [browseTotalResults, setBrowseTotalResults] = useState(0);
   const [notification, setNotification] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [immersiveMode, setImmersiveMode] = useState(false);
 
   const showNotification = useCallback((msg: string) => {
     setNotification(msg);
@@ -143,7 +144,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
+      {!immersiveMode && <header className="app-header">
         <div className="header-left">
           <h1 className="app-title" onClick={() => { setSelectedPaper(null); setViewMode('browse'); }}>
             Paperpile Navigate
@@ -198,7 +199,7 @@ export default function App() {
             &#9881;
           </button>
         </div>
-      </header>
+      </header>}
 
       {notification && (
         <div className="notification">{notification}</div>
@@ -270,6 +271,7 @@ export default function App() {
             browsePageOffset={browsePageOffset}
             browseTotalResults={browseTotalResults}
             onBrowseNavigate={handleBrowseNavigate}
+            onImmersiveModeChange={setImmersiveMode}
           />
         )}
       </main>
