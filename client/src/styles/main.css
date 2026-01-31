@@ -829,6 +829,40 @@ input[type="color"] {
   color: var(--text-primary);
 }
 
+/* Immersive mode — hides header, sidebar, and PDF toolbar */
+.paper-viewer.immersive-mode .viewer-header {
+  display: none;
+}
+
+.paper-viewer.immersive-mode .sidebar-toggle {
+  display: none;
+}
+
+.paper-viewer.immersive-mode .viewer-sidebar {
+  display: none;
+}
+
+.paper-viewer.immersive-mode .pdf-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.paper-viewer.immersive-mode .pdf-toolbar:hover,
+.paper-viewer.immersive-mode .pdf-viewer:hover .pdf-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.paper-viewer.immersive-mode .pdf-viewer {
+  position: relative;
+}
+
 .viewer-sidebar {
   width: 360px;
   border-left: 1px solid var(--border-color);

@@ -20,9 +20,11 @@ interface OutlineItem {
 interface Props {
   pdfUrl: string;
   onPageChange?: (page: number) => void;
+  immersiveMode?: boolean;
+  onToggleImmersive?: () => void;
 }
 
-export default function PDFViewer({ pdfUrl, onPageChange }: Props) {
+export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggleImmersive }: Props) {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
@@ -255,14 +257,25 @@ export default function PDFViewer({ pdfUrl, onPageChange }: Props) {
           </button>
         </div>
 
-        <a
-          href={pdfUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-secondary btn-sm"
-        >
-          Open in New Tab
-        </a>
+        <div className="pdf-toolbar-group">
+          {onToggleImmersive && (
+            <button
+              className={`pdf-nav-btn ${immersiveMode ? 'pdf-nav-btn-active' : ''}`}
+              onClick={onToggleImmersive}
+              title={immersiveMode ? 'Exit immersive mode (Esc)' : 'Immersive mode — hide all toolbars'}
+            >
+              {immersiveMode ? '\u2716' : '\u2922'}
+            </button>
+          )}
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary btn-sm"
+          >
+            Open in New Tab
+          </a>
+        </div>
       </div>
 
       {error && (
