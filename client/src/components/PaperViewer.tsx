@@ -27,11 +27,12 @@ interface Props {
   browsePageOffset?: number;
   browseTotalResults?: number;
   onBrowseNavigate?: (paper: ArxivPaper) => void;
+  onImmersiveModeChange?: (immersive: boolean) => void;
 }
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -82,6 +83,11 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
     loadComments();
     loadPaperTags();
   }, [loadComments, loadPaperTags]);
+
+  // Notify parent when immersive mode changes
+  useEffect(() => {
+    onImmersiveModeChange?.(immersiveMode);
+  }, [immersiveMode, onImmersiveModeChange]);
 
   // Escape key exits immersive mode
   useEffect(() => {
