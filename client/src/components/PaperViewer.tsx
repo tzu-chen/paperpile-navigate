@@ -37,6 +37,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [immersiveMode, setImmersiveMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const saved = isSavedPaper(paper) ? paper : null;
@@ -82,6 +83,16 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
     loadPaperTags();
   }, [loadComments, loadPaperTags]);
 
+  // Escape key exits immersive mode
+  useEffect(() => {
+    if (!immersiveMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setImmersiveMode(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [immersiveMode]);
+
   // When paper transitions from unsaved to saved, switch to comments tab
   useEffect(() => {
     if (isSavedPaper(paper)) {
@@ -90,7 +101,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
   }, [paper]);
 
   return (
-    <div className="paper-viewer">
+    <div className={`paper-viewer ${immersiveMode ? 'immersive-mode' : ''}`}>
       <div className="viewer-header">
         <div className="viewer-title-row">
           <h2><LaTeX>{paper.title}</LaTeX></h2>
@@ -182,6 +193,8 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
           <PDFViewer
             pdfUrl={api.getPdfProxyUrl(arxivId)}
             onPageChange={setCurrentPage}
+            immersiveMode={immersiveMode}
+            onToggleImmersive={() => setImmersiveMode(m => !m)}
           />
         </div>
 
