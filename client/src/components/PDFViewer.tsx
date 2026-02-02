@@ -37,6 +37,7 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const [pageInputValue, setPageInputValue] = useState('1');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfDocRef = useRef<any>(null);
+  const hasInitialScale = useRef(false);
 
   const updateCurrentPage = useCallback((page: number) => {
     if (page !== currentPageRef.current) {
@@ -46,6 +47,11 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
       onPageChange?.(page);
     }
   }, [onPageChange]);
+
+  // Reset initial scale flag when PDF changes
+  useEffect(() => {
+    hasInitialScale.current = false;
+  }, [pdfUrl]);
 
   // Track current page via scroll position
   useEffect(() => {
@@ -78,6 +84,24 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     setNumPages(pdf.numPages);
     pdfDocRef.current = pdf;
     setError(false);
+
+    // Calculate fit-to-width scale from the first page
+    if (!hasInitialScale.current) {
+      hasInitialScale.current = true;
+      pdf.getPage(1).then((page: { getViewport: (opts: { scale: number }) => { width: number } }) => {
+        const container = containerRef.current;
+        if (!container) return;
+        const viewport = page.getViewport({ scale: 1 });
+        // Account for padding/scrollbar in the container
+        const containerWidth = container.clientWidth - 20;
+        if (viewport.width > 0 && containerWidth > 0) {
+          const fitScale = containerWidth / viewport.width;
+          setScale(fitScale);
+        }
+      }).catch(() => {
+        // Keep default scale on error
+      });
+    }
 
     pdf.getOutline().then((items: OutlineItem[] | null) => {
       if (items && items.length > 0) {
