@@ -213,6 +213,46 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         const newXScale = event.transform.rescaleX(xScale);
         yAxisG.call(d3.axisLeft(newYScale).ticks(8));
         xAxisG.call(d3.axisBottom(newXScale).ticks(0)); // hide x ticks
+
+        // Update category labels dynamically
+        g.selectAll('.category-labels .cat-label')
+          .each(function (_d: unknown, i: number) {
+            if (i < catPositions.length) {
+              d3.select(this).attr('x', newXScale(catPositions[i].x));
+            }
+          });
+
+        // Update separator lines dynamically
+        g.selectAll('.category-separators .cat-separator')
+          .each(function (_d: unknown, i: number) {
+            if (i < separatorXValues.length) {
+              d3.select(this)
+                .attr('x1', newXScale(separatorXValues[i]))
+                .attr('x2', newXScale(separatorXValues[i]));
+            }
+          });
+
+        // Update shaded bands dynamically
+        let bandIdx = 0;
+        g.selectAll('.category-separators .cat-band')
+          .each(function () {
+            // Find the matching catPositions index for this band
+            while (bandIdx < catPositions.length && bandIdx % 2 !== 0) bandIdx++;
+            if (bandIdx >= catPositions.length) return;
+            const leftBound = bandIdx === 0 ? 0 : separatorXValues[bandIdx - 1];
+            const rightBound = bandIdx === catPositions.length - 1 ? 1 : separatorXValues[bandIdx];
+            d3.select(this)
+              .attr('x', newXScale(leftBound))
+              .attr('width', newXScale(rightBound) - newXScale(leftBound));
+            bandIdx += 2;
+          });
+
+        // Re-style axes after zoom
+        svg.selectAll('.wl-axis text')
+          .attr('fill', 'var(--text-muted)')
+          .attr('font-size', '11px');
+        svg.selectAll('.wl-axis line, .wl-axis path')
+          .attr('stroke', 'var(--border-color)');
       });
 
     svg.call(zoom);
@@ -230,27 +270,72 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .call(d3.axisBottom(xScale).ticks(0))
       .attr('class', 'wl-axis');
 
-    // Category labels at the top
-    const catGroups = new Map<string, number>();
+    // Collect category x-positions (sorted)
+    const catPositions: { cat: string; x: number }[] = [];
+    const catSeen = new Set<string>();
     papers.forEach(p => {
       try {
         const cats = JSON.parse(p.categories) as string[];
         const cat = cats[0] || 'unknown';
-        if (!catGroups.has(cat)) {
+        if (!catSeen.has(cat)) {
+          catSeen.add(cat);
           const pos = paperPositions.get(p.id);
-          if (pos) catGroups.set(cat, pos.x);
+          if (pos) catPositions.push({ cat, x: pos.x });
         }
       } catch {}
     });
+    catPositions.sort((a, b) => a.x - b.x);
 
-    catGroups.forEach((xPos, cat) => {
-      g.append('text')
-        .attr('x', xScale(xPos))
+    // Compute separator boundaries (midpoints between adjacent categories)
+    const separatorXValues: number[] = [];
+    for (let i = 0; i < catPositions.length - 1; i++) {
+      separatorXValues.push((catPositions[i].x + catPositions[i + 1].x) / 2);
+    }
+
+    // Group for separators and labels (outside chartArea, inside g, so not clipped)
+    const separatorGroup = g.insert('g', ':first-child').attr('class', 'category-separators');
+
+    // Draw alternating shaded bands
+    catPositions.forEach((cp, i) => {
+      const leftBound = i === 0 ? 0 : separatorXValues[i - 1];
+      const rightBound = i === catPositions.length - 1 ? 1 : separatorXValues[i];
+      if (i % 2 === 0) {
+        separatorGroup.append('rect')
+          .attr('class', 'cat-band')
+          .attr('x', xScale(leftBound))
+          .attr('y', 0)
+          .attr('width', xScale(rightBound) - xScale(leftBound))
+          .attr('height', innerH)
+          .attr('fill', 'var(--text-muted)')
+          .attr('opacity', 0.04);
+      }
+    });
+
+    // Draw separator lines between categories
+    separatorXValues.forEach(sx => {
+      separatorGroup.append('line')
+        .attr('class', 'cat-separator')
+        .attr('x1', xScale(sx))
+        .attr('y1', 0)
+        .attr('x2', xScale(sx))
+        .attr('y2', innerH)
+        .attr('stroke', 'var(--text-muted)')
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.15)
+        .attr('stroke-dasharray', '4,4');
+    });
+
+    // Category labels at the top (dynamic with zoom)
+    const labelGroup = g.append('g').attr('class', 'category-labels');
+    catPositions.forEach(cp => {
+      labelGroup.append('text')
+        .attr('class', 'cat-label')
+        .attr('x', xScale(cp.x))
         .attr('y', -10)
         .attr('text-anchor', 'middle')
         .attr('fill', 'var(--text-muted)')
         .attr('font-size', '10px')
-        .text(cat);
+        .text(cp.cat);
     });
 
     // Draw citation edges — conditionally visible
