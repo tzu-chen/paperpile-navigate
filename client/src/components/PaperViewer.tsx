@@ -18,6 +18,7 @@ interface Props {
   paper: SavedPaper | ArxivPaper;
   isInLibrary: boolean;
   onSavePaper?: () => Promise<void>;
+  onDeletePaper?: () => Promise<void>;
   allTags: Tag[];
   onTagsChanged: () => Promise<void>;
   showNotification: (msg: string) => void;
@@ -33,7 +34,7 @@ interface Props {
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -145,9 +146,22 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
               ArXiv Page
             </a>
             {isInLibrary ? (
-              <button className="btn btn-success btn-sm" disabled>
-                In Library
-              </button>
+              <>
+                <button className="btn btn-success btn-sm" disabled>
+                  In Library
+                </button>
+                {onDeletePaper && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={async () => {
+                      if (!confirm(`Delete "${paper.title}" from your library?`)) return;
+                      await onDeletePaper();
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 className="btn btn-primary btn-sm"
