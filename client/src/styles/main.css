@@ -728,6 +728,25 @@ input[type="color"] {
   line-height: 1.4;
 }
 
+/* Compact mode for sidebar panel */
+.batch-import-compact {
+  padding: 12px;
+  background: transparent;
+  border-bottom: none;
+}
+
+.batch-import-compact .batch-import-hint {
+  margin-bottom: 8px;
+}
+
+.batch-import-body-vertical {
+  flex-direction: column;
+}
+
+.batch-import-compact .batch-import-textarea {
+  min-height: 80px;
+}
+
 /* ========================
    Paper Viewer
    ======================== */

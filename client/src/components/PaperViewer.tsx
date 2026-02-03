@@ -8,6 +8,7 @@ import ExportPanel from './ExportPanel';
 import ChatPanel from './ChatPanel';
 import WorldlineSidebarPanel from './WorldlineSidebarPanel';
 import WorldlineInfoPanel from './WorldlineInfoPanel';
+import BatchImportPanel from './BatchImportPanel';
 import LaTeX from './LaTeX';
 
 function isSavedPaper(paper: SavedPaper | ArxivPaper): paper is SavedPaper {
@@ -30,11 +31,12 @@ interface Props {
   browseTotalResults?: number;
   onBrowseNavigate?: (paper: ArxivPaper) => void;
   onImmersiveModeChange?: (immersive: boolean) => void;
+  onLibraryRefresh?: () => Promise<void>;
 }
 
-type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline';
+type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline' | 'import';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, onLibraryRefresh }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -259,6 +261,12 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
             >
               Worldline
             </button>}
+            <button
+              className={`sidebar-tab ${activePanel === 'import' ? 'active' : ''}`}
+              onClick={() => setActivePanel('import')}
+            >
+              Import
+            </button>
           </div>
 
           <div className={`sidebar-content ${activePanel === 'chat' ? 'sidebar-content-chat' : ''}`}>
@@ -363,6 +371,14 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
                 paper={saved}
                 onOpenPaper={onOpenPaper}
                 showNotification={showNotification}
+              />
+            )}
+            {activePanel === 'import' && (
+              <BatchImportPanel
+                tags={allTags}
+                showNotification={showNotification}
+                onImportComplete={onLibraryRefresh || (async () => {})}
+                compact
               />
             )}
           </div>

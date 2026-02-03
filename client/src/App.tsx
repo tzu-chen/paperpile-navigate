@@ -286,6 +286,7 @@ export default function App() {
             browseTotalResults={browseTotalResults}
             onBrowseNavigate={handleBrowseNavigate}
             onImmersiveModeChange={setImmersiveMode}
+            onLibraryRefresh={loadLibrary}
           />
         )}
       </main>
