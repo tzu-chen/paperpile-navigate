@@ -7,6 +7,7 @@ import TagPanel from './TagPanel';
 import ExportPanel from './ExportPanel';
 import ChatPanel from './ChatPanel';
 import WorldlineSidebarPanel from './WorldlineSidebarPanel';
+import WorldlineInfoPanel from './WorldlineInfoPanel';
 import LaTeX from './LaTeX';
 
 function isSavedPaper(paper: SavedPaper | ArxivPaper): paper is SavedPaper {
@@ -279,6 +280,15 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, allTags, 
                       paperTags={paperTags}
                       allTags={allTags}
                       onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
+                      showNotification={showNotification}
+                    />
+                  </div>
+                )}
+                {saved && (
+                  <div className="info-section">
+                    <h4>Worldlines</h4>
+                    <WorldlineInfoPanel
+                      paperId={saved.id}
                       showNotification={showNotification}
                     />
                   </div>

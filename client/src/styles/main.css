@@ -1284,6 +1284,15 @@ input[type="color"] {
 }
 
 /* ========================
+   Worldline Info Panel
+   ======================== */
+.worldline-info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ========================
    Export Panel
    ======================== */
 .export-panel {
