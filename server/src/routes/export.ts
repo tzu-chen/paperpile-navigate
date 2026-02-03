@@ -34,10 +34,18 @@ router.get('/bibtex/:id', (req: Request, res: Response) => {
   }
 });
 
-// GET /api/export/bibtex - Export all saved papers as BibTeX
+// GET /api/export/bibtex - Export saved papers as BibTeX (optionally filtered by IDs)
 router.get('/bibtex', (req: Request, res: Response) => {
   try {
-    const papers = db.getPapers() as SavedPaper[];
+    let papers: SavedPaper[];
+    if (req.query.ids) {
+      const ids = String(req.query.ids).split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      const allPapers = db.getPapers() as SavedPaper[];
+      const idSet = new Set(ids);
+      papers = allPapers.filter(p => idSet.has(p.id));
+    } else {
+      papers = db.getPapers() as SavedPaper[];
+    }
 
     const bundle = papers.map(paper => ({
       paper,

@@ -131,8 +131,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   }
 
   function handleExportAll() {
-    window.open(api.getBibtexUrl(undefined, true), '_blank');
+    const ids = filteredPapers.map(p => p.id);
+    window.open(api.getBibtexUrl(undefined, true, ids), '_blank');
   }
+
+  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || searchTerm !== '';
 
 
   return (
@@ -181,7 +184,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
 
           <div className="control-group">
             <button className="btn btn-primary btn-sm" onClick={handleExportAll}>
-              Export All (BibTeX)
+              {hasActiveFilters ? `Export ${filteredPapers.length} (BibTeX)` : 'Export All (BibTeX)'}
             </button>
           </div>
         </div>
