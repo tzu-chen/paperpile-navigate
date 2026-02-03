@@ -32,6 +32,9 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [pdfDarkTheme, setPdfDarkTheme] = useState(() => {
+    return localStorage.getItem('pdfDarkTheme') === 'true';
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const currentPageRef = useRef(1);
   const [pageInputValue, setPageInputValue] = useState('1');
@@ -188,6 +191,14 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const zoomIn = () => setScale(s => Math.min(s + 0.2, 3));
   const zoomOut = () => setScale(s => Math.max(s - 0.2, 0.4));
 
+  const togglePdfDarkTheme = () => {
+    setPdfDarkTheme(prev => {
+      const next = !prev;
+      localStorage.setItem('pdfDarkTheme', String(next));
+      return next;
+    });
+  };
+
   function renderOutlineItems(items: OutlineItem[], level: number = 0, parentKey: string = '') {
     return items.map((item, index) => {
       const key = parentKey ? `${parentKey}-${index}` : String(index);
@@ -230,7 +241,7 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   }
 
   return (
-    <div className="pdf-viewer">
+    <div className={`pdf-viewer ${pdfDarkTheme ? 'pdf-dark-theme' : ''}`}>
       <div className="pdf-toolbar">
         <div className="pdf-toolbar-group">
           {outline.length > 0 && (
@@ -282,6 +293,13 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
         </div>
 
         <div className="pdf-toolbar-group">
+          <button
+            className={`pdf-nav-btn ${pdfDarkTheme ? 'pdf-nav-btn-active' : ''}`}
+            onClick={togglePdfDarkTheme}
+            title={pdfDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {pdfDarkTheme ? '\u2600' : '\u263D'}
+          </button>
           {onToggleImmersive && (
             <button
               className={`pdf-nav-btn ${immersiveMode ? 'pdf-nav-btn-active' : ''}`}
