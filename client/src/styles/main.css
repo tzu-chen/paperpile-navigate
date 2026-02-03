@@ -1036,6 +1036,20 @@ input[type="color"] {
   display: block;
 }
 
+/* PDF Dark Theme — inverts PDF content for night reading */
+.pdf-dark-theme .pdf-pages-container {
+  background: #2a2a2a;
+}
+
+.pdf-dark-theme .pdf-page-wrapper .react-pdf__Page {
+  filter: invert(0.88) hue-rotate(180deg);
+  box-shadow: none;
+}
+
+.pdf-dark-theme .pdf-page-wrapper .react-pdf__Page__annotations a {
+  color: #7cacf8;
+}
+
 .pdf-loading, .pdf-error {
   display: flex;
   flex-direction: column;
