@@ -135,6 +135,19 @@ export default function App() {
     }
   };
 
+  const handleDeleteFromViewer = async (paper: SavedPaper) => {
+    try {
+      await api.deletePaper(paper.id);
+      showNotification(`Deleted "${paper.title}" from library`);
+      setSelectedPaper(null);
+      setPreviewPaper(null);
+      setViewMode('library');
+      await loadLibrary();
+    } catch (err) {
+      showNotification('Failed to delete paper');
+    }
+  };
+
   const handleBackFromViewer = () => {
     setSelectedPaper(null);
     setPreviewPaper(null);
@@ -261,6 +274,7 @@ export default function App() {
             paper={(selectedPaper || previewPaper)!}
             isInLibrary={!!selectedPaper}
             onSavePaper={previewPaper ? async () => { await handleSaveFromViewer(previewPaper); } : undefined}
+            onDeletePaper={selectedPaper ? async () => { await handleDeleteFromViewer(selectedPaper); } : undefined}
             allTags={tags}
             onTagsChanged={loadLibrary}
             showNotification={showNotification}
