@@ -161,11 +161,15 @@ export async function getPaperTags(paperId: number): Promise<Tag[]> {
 }
 
 // Export
-export function getBibtexUrl(paperId?: number, download = true): string {
+export function getBibtexUrl(paperId?: number, download = true, paperIds?: number[]): string {
   if (paperId) {
     return `${BASE}/export/bibtex/${paperId}?download=${download}`;
   }
-  return `${BASE}/export/bibtex?download=${download}`;
+  const params = new URLSearchParams({ download: String(download) });
+  if (paperIds && paperIds.length > 0) {
+    params.set('ids', paperIds.join(','));
+  }
+  return `${BASE}/export/bibtex?${params}`;
 }
 
 export async function getBibtexText(paperId: number): Promise<string> {
