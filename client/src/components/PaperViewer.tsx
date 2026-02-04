@@ -41,7 +41,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
