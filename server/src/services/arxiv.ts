@@ -157,7 +157,7 @@ function parseRssItem(item: RssItem, announceType?: string): ArxivPaper | null {
     absUrl: `https://arxiv.org/abs/${id}`,
   };
 
-  if (announceType === 'new' || announceType === 'cross') {
+  if (announceType === 'new' || announceType === 'cross' || announceType === 'replace' || announceType === 'replace-cross') {
     paper.announceType = announceType;
   }
 
@@ -182,7 +182,6 @@ export async function fetchLatestArxiv(category: string): Promise<{ papers: Arxi
   const papers: ArxivPaper[] = [];
   for (const item of channel.item) {
     const announceType = item['arxiv:announce_type']?.[0];
-    if (announceType === 'replace') continue; // skip replacements, keep new + cross-listings
     const paper = parseRssItem(item, announceType);
     if (paper) papers.push(paper);
   }
