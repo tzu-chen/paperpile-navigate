@@ -237,8 +237,8 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
           // Show separator before first cross-listed paper in latest mode
           const showCrossListSeparator = isLatestMode
-            && paper.announceType === 'cross-list'
-            && (index === 0 || papers[index - 1]?.announceType !== 'cross-list');
+            && paper.announceType === 'cross'
+            && (index === 0 || papers[index - 1]?.announceType !== 'cross');
 
           return (
             <React.Fragment key={paper.id}>
