@@ -157,7 +157,7 @@ function parseRssItem(item: RssItem, announceType?: string): ArxivPaper | null {
     absUrl: `https://arxiv.org/abs/${id}`,
   };
 
-  if (announceType === 'new' || announceType === 'cross-list') {
+  if (announceType === 'new' || announceType === 'cross') {
     paper.announceType = announceType;
   }
 
