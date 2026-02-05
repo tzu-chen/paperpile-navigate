@@ -10,7 +10,7 @@ export interface ArxivPaper {
   absUrl: string;
   doi?: string;
   journalRef?: string;
-  announceType?: 'new' | 'cross';
+  announceType?: 'new' | 'cross' | 'replace' | 'replace-cross';
 }
 
 export interface SavedPaper {

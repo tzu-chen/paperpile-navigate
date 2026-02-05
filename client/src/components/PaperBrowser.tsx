@@ -240,11 +240,23 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
             && paper.announceType === 'cross'
             && (index === 0 || papers[index - 1]?.announceType !== 'cross');
 
+          // Show separator before first replacement paper in latest mode
+          const isReplace = paper.announceType === 'replace' || paper.announceType === 'replace-cross';
+          const prevIsReplace = papers[index - 1]?.announceType === 'replace' || papers[index - 1]?.announceType === 'replace-cross';
+          const showReplaceSeparator = isLatestMode
+            && isReplace
+            && (index === 0 || !prevIsReplace);
+
           return (
             <React.Fragment key={paper.id}>
               {showCrossListSeparator && (
                 <div className="cross-list-separator">
                   <span className="cross-list-separator-label">Cross-listed papers</span>
+                </div>
+              )}
+              {showReplaceSeparator && (
+                <div className="cross-list-separator">
+                  <span className="cross-list-separator-label">Replacement submissions</span>
                 </div>
               )}
               <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
