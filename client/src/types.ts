@@ -10,6 +10,7 @@ export interface ArxivPaper {
   absUrl: string;
   doi?: string;
   journalRef?: string;
+  announceType?: 'new' | 'cross-list';
 }
 
 export interface SavedPaper {
