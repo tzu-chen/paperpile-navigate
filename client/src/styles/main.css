@@ -460,6 +460,33 @@ input[type="color"] {
 }
 
 /* ========================
+   Cross-list Separator
+   ======================== */
+.cross-list-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.cross-list-separator::before,
+.cross-list-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.cross-list-separator-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* ========================
    Pagination
    ======================== */
 .pagination {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArxivPaper, CategoryGroup, PaperSimilarityResult, WorldlineSimilarityMatch } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
@@ -229,14 +229,25 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
       )}
 
       <div className="paper-list">
-        {papers.map(paper => {
+        {papers.map((paper, index) => {
           const isSaved = savedPaperIds.has(paper.id);
           const isSaving = savingIds.has(paper.id);
           const isExpanded = expandedAbstracts.has(paper.id);
           const worldlineMatches = similarityMap.get(paper.id);
 
+          // Show separator before first cross-listed paper in latest mode
+          const showCrossListSeparator = isLatestMode
+            && paper.announceType === 'cross-list'
+            && (index === 0 || papers[index - 1]?.announceType !== 'cross-list');
+
           return (
-            <div key={paper.id} className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
+            <React.Fragment key={paper.id}>
+              {showCrossListSeparator && (
+                <div className="cross-list-separator">
+                  <span className="cross-list-separator-label">Cross-listed papers</span>
+                </div>
+              )}
+              <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
               <div className="paper-card-header">
                 <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
                   <LaTeX>{paper.title}</LaTeX>
@@ -329,6 +340,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
               <div className="paper-id">arXiv: {paper.id}</div>
             </div>
+            </React.Fragment>
           );
         })}
       </div>

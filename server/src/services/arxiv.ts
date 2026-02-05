@@ -125,7 +125,7 @@ interface RssItem {
   'dc:creator'?: string[];
 }
 
-function parseRssItem(item: RssItem): ArxivPaper | null {
+function parseRssItem(item: RssItem, announceType?: string): ArxivPaper | null {
   const link = item.link?.[0] || '';
   const idMatch = link.match(/abs\/(.+?)(?:v\d+)?$/);
   if (!idMatch) return null;
@@ -145,7 +145,7 @@ function parseRssItem(item: RssItem): ArxivPaper | null {
   const pubDate = item.pubDate?.[0] || new Date().toISOString();
   const categories = item.category || [];
 
-  return {
+  const paper: ArxivPaper = {
     id,
     title: (item.title?.[0] || '').replace(/\s+/g, ' ').trim(),
     summary: summary.replace(/\s+/g, ' ').trim(),
@@ -156,6 +156,12 @@ function parseRssItem(item: RssItem): ArxivPaper | null {
     pdfUrl: `https://arxiv.org/pdf/${id}`,
     absUrl: `https://arxiv.org/abs/${id}`,
   };
+
+  if (announceType === 'new' || announceType === 'cross-list') {
+    paper.announceType = announceType;
+  }
+
+  return paper;
 }
 
 export async function fetchLatestArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
@@ -177,7 +183,7 @@ export async function fetchLatestArxiv(category: string): Promise<{ papers: Arxi
   for (const item of channel.item) {
     const announceType = item['arxiv:announce_type']?.[0];
     if (announceType === 'replace') continue; // skip replacements, keep new + cross-listings
-    const paper = parseRssItem(item);
+    const paper = parseRssItem(item, announceType);
     if (paper) papers.push(paper);
   }
 
