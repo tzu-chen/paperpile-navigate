@@ -12,10 +12,10 @@ interface Props {
 export default function BatchImportPanel({ tags, showNotification, onImportComplete, compact = false }: Props) {
   const [importArxivIds, setImportArxivIds] = useState('');
   const [importSelectedTagIds, setImportSelectedTagIds] = useState<Set<number>>(new Set());
-  const [importWlMode, setImportWlMode] = useState<'none' | 'new' | 'existing'>('none');
-  const [importWlName, setImportWlName] = useState('');
-  const [importWlColor, setImportWlColor] = useState('#6366f1');
-  const [importExistingWlId, setImportExistingWlId] = useState<number | null>(null);
+  const [selectedWorldlineIds, setSelectedWorldlineIds] = useState<Set<number>>(new Set());
+  const [newWorldlines, setNewWorldlines] = useState<Array<{ name: string; color: string }>>([]);
+  const [newWlName, setNewWlName] = useState('');
+  const [newWlColor, setNewWlColor] = useState('#6366f1');
   const [importLoading, setImportLoading] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [worldlines, setWorldlines] = useState<Worldline[]>([]);
@@ -33,6 +33,25 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
     });
   }
 
+  function toggleWorldline(wlId: number) {
+    setSelectedWorldlineIds(prev => {
+      const next = new Set(prev);
+      if (next.has(wlId)) next.delete(wlId);
+      else next.add(wlId);
+      return next;
+    });
+  }
+
+  function addNewWorldline() {
+    if (!newWlName.trim()) return;
+    setNewWorldlines(prev => [...prev, { name: newWlName.trim(), color: newWlColor }]);
+    setNewWlName('');
+  }
+
+  function removeNewWorldline(index: number) {
+    setNewWorldlines(prev => prev.filter((_, i) => i !== index));
+  }
+
   async function handleBatchImport() {
     const ids = importArxivIds
       .split(/[\n,]+/)
@@ -42,24 +61,16 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
       showNotification('Enter at least one ArXiv ID');
       return;
     }
-    if (importWlMode === 'new' && !importWlName.trim()) {
-      showNotification('Enter a worldline name');
-      return;
-    }
-    if (importWlMode === 'existing' && importExistingWlId === null) {
-      showNotification('Select an existing worldline');
-      return;
-    }
-
     setImportLoading(true);
     setImportStatus(`Importing ${ids.length} papers and inferring citations...`);
     try {
       const options: Parameters<typeof api.batchImport>[1] = {};
 
-      if (importWlMode === 'new') {
-        options.worldline = { name: importWlName.trim(), color: importWlColor };
-      } else if (importWlMode === 'existing' && importExistingWlId !== null) {
-        options.worldline = { id: importExistingWlId };
+      if (selectedWorldlineIds.size > 0) {
+        options.worldlineIds = Array.from(selectedWorldlineIds);
+      }
+      if (newWorldlines.length > 0) {
+        options.newWorldlines = newWorldlines;
       }
 
       if (importSelectedTagIds.size > 0) {
@@ -80,8 +91,11 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
         showNotification(`Imported ${result.papers_added} papers, ${result.citations_created} citations`);
       }
       setImportArxivIds('');
-      setImportWlName('');
+      setSelectedWorldlineIds(new Set());
+      setNewWorldlines([]);
       setImportSelectedTagIds(new Set());
+      // Refresh worldlines list since new ones may have been created
+      api.getWorldlines().then(setWorldlines).catch(() => {});
       await onImportComplete();
     } catch (err: any) {
       setImportStatus(null);
@@ -133,75 +147,84 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
           )}
 
           <div className="batch-import-group">
-            <label className="batch-import-label">Worldline</label>
-            <div className="batch-import-wl-toggle">
-              <button
-                className={`btn btn-sm ${importWlMode === 'none' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setImportWlMode('none')}
-                disabled={importLoading}
-              >
-                None
-              </button>
-              <button
-                className={`btn btn-sm ${importWlMode === 'new' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setImportWlMode('new')}
-                disabled={importLoading}
-              >
-                New
-              </button>
-              <button
-                className={`btn btn-sm ${importWlMode === 'existing' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setImportWlMode('existing')}
-                disabled={importLoading || worldlines.length === 0}
-                title={worldlines.length === 0 ? 'No existing worldlines' : ''}
-              >
-                Existing
-              </button>
-            </div>
+            <label className="batch-import-label">Worldlines</label>
 
-            {importWlMode === 'new' && (
-              <div className="batch-import-wl-form">
-                <input
-                  type="text"
-                  placeholder="Worldline name..."
-                  value={importWlName}
-                  onChange={e => setImportWlName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !importLoading && handleBatchImport()}
-                  disabled={importLoading}
-                />
-                <input
-                  type="color"
-                  value={importWlColor}
-                  onChange={e => setImportWlColor(e.target.value)}
-                  disabled={importLoading}
-                />
+            {(selectedWorldlineIds.size > 0 || newWorldlines.length > 0) && (
+              <div className="tag-chip-list">
+                {worldlines.filter(wl => selectedWorldlineIds.has(wl.id)).map(wl => (
+                  <span key={wl.id} className="tag-chip" style={{ backgroundColor: wl.color }}>
+                    {wl.name}
+                    <button
+                      className="tag-chip-remove"
+                      onClick={() => toggleWorldline(wl.id)}
+                      title="Remove from import"
+                      disabled={importLoading}
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+                {newWorldlines.map((nw, idx) => (
+                  <span key={`new-${idx}`} className="tag-chip" style={{ backgroundColor: nw.color }}>
+                    {nw.name} <span className="muted-inline">(new)</span>
+                    <button
+                      className="tag-chip-remove"
+                      onClick={() => removeNewWorldline(idx)}
+                      title="Remove new worldline"
+                      disabled={importLoading}
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
 
-            {importWlMode === 'existing' && (
-              <select
-                className="batch-import-wl-select"
-                value={importExistingWlId ?? ''}
-                onChange={e => setImportExistingWlId(e.target.value ? Number(e.target.value) : null)}
-                disabled={importLoading}
-              >
-                <option value="">Select a worldline...</option>
-                {worldlines.map(wl => (
-                  <option key={wl.id} value={wl.id}>{wl.name}</option>
+            {worldlines.filter(wl => !selectedWorldlineIds.has(wl.id)).length > 0 && (
+              <div className="tag-chip-list">
+                {worldlines.filter(wl => !selectedWorldlineIds.has(wl.id)).map(wl => (
+                  <span
+                    key={wl.id}
+                    className="tag-chip tag-chip-add"
+                    style={{ borderColor: wl.color, color: wl.color }}
+                    onClick={() => !importLoading && toggleWorldline(wl.id)}
+                    title="Click to add"
+                  >
+                    + {wl.name}
+                  </span>
                 ))}
-              </select>
+              </div>
             )}
+
+            <div className="tag-create-form">
+              <input
+                type="text"
+                placeholder="Worldline name"
+                value={newWlName}
+                onChange={e => setNewWlName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addNewWorldline()}
+                disabled={importLoading}
+              />
+              <input
+                type="color"
+                value={newWlColor}
+                onChange={e => setNewWlColor(e.target.value)}
+                disabled={importLoading}
+              />
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={addNewWorldline}
+                disabled={!newWlName.trim() || importLoading}
+              >
+                Add
+              </button>
+            </div>
           </div>
 
           <button
             className="btn btn-primary batch-import-submit"
             onClick={handleBatchImport}
-            disabled={
-              importLoading ||
-              !importArxivIds.trim() ||
-              (importWlMode === 'new' && !importWlName.trim()) ||
-              (importWlMode === 'existing' && importExistingWlId === null)
-            }
+            disabled={importLoading || !importArxivIds.trim()}
           >
             {importLoading ? 'Importing...' : 'Import Papers'}
           </button>

@@ -1485,6 +1485,11 @@ input[type="color"] {
   font-size: 13px;
 }
 
+.muted-inline {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
 /* ========================
    Scrollbar
    ======================== */
