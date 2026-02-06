@@ -275,8 +275,9 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
           return (
             <React.Fragment key={paper.id}>
-              <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
+              <div className="paper-card-row">
               <span className="paper-number">{index + 1}</span>
+              <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
               <div className="paper-card-header">
                 <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
                   <LaTeX>{paper.title}</LaTeX>
@@ -368,6 +369,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
               )}
 
               <div className="paper-id">arXiv: {paper.id}</div>
+            </div>
             </div>
             </React.Fragment>
           );

@@ -513,13 +513,26 @@ input[type="color"] {
 /* ========================
    Paper Number
    ======================== */
+.paper-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.paper-card-row .paper-card {
+  flex: 1;
+  min-width: 0;
+}
+
 .paper-number {
-  display: block;
-  font-size: 11px;
+  flex-shrink: 0;
+  width: 28px;
+  padding-top: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-muted);
-  margin-bottom: 6px;
   font-family: 'SF Mono', 'Fira Code', monospace;
+  text-align: right;
 }
 
 /* ========================
