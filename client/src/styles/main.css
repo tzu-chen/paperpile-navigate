@@ -460,30 +460,66 @@ input[type="color"] {
 }
 
 /* ========================
-   Cross-list Separator
+   Announcement Tabs
    ======================== */
-.cross-list-separator {
+.announcement-tabs {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
+  gap: 0;
+  padding: 0 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.cross-list-separator::before,
-.cross-list-separator::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border-color);
+.announcement-tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
 }
 
-.cross-list-separator-label {
-  font-size: 12px;
+.announcement-tab:hover {
+  color: var(--text-primary);
+}
+
+.announcement-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
   font-weight: 600;
+}
+
+.announcement-tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
+  min-width: 18px;
+  text-align: center;
+}
+
+.announcement-tab.active .announcement-tab-count {
+  background: var(--accent);
+  color: white;
+}
+
+/* ========================
+   Paper Number
+   ======================== */
+.paper-number {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 /* ========================
