@@ -25,6 +25,7 @@ interface Props {
   showNotification: (msg: string) => void;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
+  onSearchAuthor: (name: string) => void;
   onOpenPaper: (paper: SavedPaper) => void;
   browsePapers?: ArxivPaper[];
   browsePageOffset?: number;
@@ -36,7 +37,7 @@ interface Props {
 
 type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline' | 'import';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, onLibraryRefresh }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, onLibraryRefresh }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
@@ -192,7 +193,8 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
                 <button
                   className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
                   onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
-                  title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                  onContextMenu={(e) => { e.preventDefault(); onSearchAuthor(author); }}
+                  title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites | Right-click to search`}
                 >
                   {author}
                 </button>
@@ -328,7 +330,8 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
                         <button
                           className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
                           onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
-                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                          onContextMenu={(e) => { e.preventDefault(); onSearchAuthor(author); }}
+                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites | Right-click to search`}
                         >
                           {author}
                         </button>

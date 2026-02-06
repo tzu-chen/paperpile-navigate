@@ -62,7 +62,12 @@ export async function searchArxiv(params: {
     searchTerms.push(`cat:${category}`);
   }
   if (query) {
-    searchTerms.push(`all:${query}`);
+    // If query already has a field prefix (e.g. au:, ti:, abs:), use it directly
+    if (/^(au|ti|abs|co|jr|cat|rn|id|all):/.test(query)) {
+      searchTerms.push(query);
+    } else {
+      searchTerms.push(`all:${query}`);
+    }
   }
 
   const searchQuery = searchTerms.length > 0
