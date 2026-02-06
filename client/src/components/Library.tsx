@@ -12,6 +12,7 @@ interface Props {
   showNotification: (msg: string) => void;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
+  onSearchAuthor: (name: string) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -28,7 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
   exported: '#8b5cf6',
 };
 
-export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor }: Props) {
+export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor }: Props) {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
   const [filterWorldline, setFilterWorldline] = useState<number | null>(null);
@@ -333,7 +334,8 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                         <button
                           className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
                           onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
-                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                          onContextMenu={(e) => { e.preventDefault(); onSearchAuthor(author); }}
+                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites | Right-click to search`}
                         >
                           {author}
                         </button>

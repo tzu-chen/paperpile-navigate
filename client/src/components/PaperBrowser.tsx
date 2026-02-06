@@ -10,6 +10,8 @@ interface Props {
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
   onPapersLoaded?: (papers: ArxivPaper[], pageOffset: number, totalResults: number) => void;
+  pendingAuthorSearch?: string | null;
+  onAuthorSearchHandled?: () => void;
 }
 
 const SORT_OPTIONS = [
@@ -18,7 +20,7 @@ const SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevance' },
 ];
 
-export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor, onPapersLoaded }: Props) {
+export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, favoriteAuthorNames, onFavoriteAuthor, onPapersLoaded, pendingAuthorSearch, onAuthorSearchHandled }: Props) {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState(
     () => localStorage.getItem('paperpile-navigate-category') || 'cs.AI'
@@ -96,6 +98,16 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
     onPapersLoaded?.(papers, page * PAGE_SIZE, totalResults);
   }, [papers, page, totalResults, onPapersLoaded]);
 
+  // Handle author search triggered from other views (Library, PaperViewer)
+  useEffect(() => {
+    if (pendingAuthorSearch) {
+      const query = `au:"${pendingAuthorSearch}"`;
+      setSearchQuery(query);
+      performSearch(0, query);
+      onAuthorSearchHandled?.();
+    }
+  }, [pendingAuthorSearch]);
+
   async function fetchLatest() {
     setLoading(true);
     setActiveTab('new');
@@ -111,12 +123,13 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
     }
   }
 
-  async function performSearch(startPage: number) {
+  async function performSearch(startPage: number, queryOverride?: string) {
     setLoading(true);
+    const q = queryOverride !== undefined ? queryOverride : searchQuery;
     try {
       const result = await api.searchArxiv({
         category: selectedCategory || undefined,
-        query: searchQuery || undefined,
+        query: q || undefined,
         start: startPage * PAGE_SIZE,
         maxResults: PAGE_SIZE,
         sortBy,
@@ -129,6 +142,13 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleAuthorRightClick(e: React.MouseEvent, authorName: string) {
+    e.preventDefault();
+    const query = `au:"${authorName}"`;
+    setSearchQuery(query);
+    performSearch(0, query);
   }
 
   async function handleSave(paper: ArxivPaper) {
@@ -338,7 +358,8 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                       <button
                         className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
                         onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
-                        title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites`}
+                        onContextMenu={(e) => handleAuthorRightClick(e, author)}
+                        title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites | Right-click to search`}
                       >
                         {author}
                       </button>

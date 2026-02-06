@@ -24,6 +24,7 @@ export default function App() {
   const [notification, setNotification] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
+  const [pendingAuthorSearch, setPendingAuthorSearch] = useState<string | null>(null);
 
   const showNotification = useCallback((msg: string) => {
     setNotification(msg);
@@ -76,6 +77,11 @@ export default function App() {
     } catch (err: any) {
       showNotification(err.message || 'Failed to add author');
     }
+  };
+
+  const handleSearchAuthor = (name: string) => {
+    setPendingAuthorSearch(name);
+    setViewMode('browse');
   };
 
   const handleSavePaper = async (paper: ArxivPaper) => {
@@ -231,6 +237,8 @@ export default function App() {
               setBrowsePageOffset(pageOffset);
               setBrowseTotalResults(totalResults);
             }}
+            pendingAuthorSearch={pendingAuthorSearch}
+            onAuthorSearchHandled={() => setPendingAuthorSearch(null)}
           />
         )}
         {viewMode === 'library' && (
@@ -242,6 +250,7 @@ export default function App() {
             showNotification={showNotification}
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
+            onSearchAuthor={handleSearchAuthor}
           />
         )}
         {viewMode === 'authors' && (
@@ -280,6 +289,7 @@ export default function App() {
             showNotification={showNotification}
             favoriteAuthorNames={favoriteAuthorNames}
             onFavoriteAuthor={handleFavoriteAuthor}
+            onSearchAuthor={handleSearchAuthor}
             onOpenPaper={handleOpenPaper}
             browsePapers={browsePapers}
             browsePageOffset={browsePageOffset}
