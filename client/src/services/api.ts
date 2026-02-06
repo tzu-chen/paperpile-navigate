@@ -287,25 +287,24 @@ export async function removeWorldlinePaper(worldlineId: number, paperId: number)
 export async function batchImport(
   arxivIds: string[],
   options?: {
-    worldline?: { name: string; color?: string } | { id: number };
+    worldlineIds?: number[];
+    newWorldlines?: Array<{ name: string; color: string }>;
     tagIds?: number[];
   }
 ): Promise<{
   success: boolean;
   papers_added: number;
   citations_created: number;
-  worldline_id: number | null;
+  worldline_ids: number[];
   tags_applied: number;
   errors: string[];
 }> {
   const body: Record<string, unknown> = { arxiv_ids: arxivIds };
-  if (options?.worldline) {
-    if ('id' in options.worldline) {
-      body.worldline_id = options.worldline.id;
-    } else {
-      body.worldline_name = options.worldline.name;
-      body.worldline_color = options.worldline.color;
-    }
+  if (options?.worldlineIds && options.worldlineIds.length > 0) {
+    body.worldline_ids = options.worldlineIds;
+  }
+  if (options?.newWorldlines && options.newWorldlines.length > 0) {
+    body.new_worldlines = options.newWorldlines;
   }
   if (options?.tagIds && options.tagIds.length > 0) {
     body.tag_ids = options.tagIds;

@@ -141,7 +141,7 @@ router.post('/citations/import', async (req: Request, res: Response) => {
 // POST /api/worldlines/batch-import — batch import papers, optionally infer citations, assign to worldline and/or tags
 router.post('/batch-import', async (req: Request, res: Response) => {
   try {
-    const { arxiv_ids, worldline_name, worldline_color, worldline_id, tag_ids } = req.body;
+    const { arxiv_ids, worldline_name, worldline_color, worldline_id, worldline_ids, new_worldlines, tag_ids } = req.body;
 
     if (!arxiv_ids || !Array.isArray(arxiv_ids) || arxiv_ids.length === 0) {
       return res.status(400).json({ error: 'arxiv_ids array is required' });
@@ -245,27 +245,43 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       }
     }
 
-    // Step 3: Optionally create/assign worldline
-    let targetWorldlineId: number | null = null;
-    if (worldline_id) {
-      targetWorldlineId = worldline_id;
-    } else if (worldline_name && worldline_name.trim()) {
+    // Step 3: Optionally create/assign worldlines (supports multiple)
+    const targetWorldlineIds: number[] = [];
+
+    // Multiple existing worldline IDs
+    if (worldline_ids && Array.isArray(worldline_ids)) {
+      targetWorldlineIds.push(...worldline_ids);
+    }
+    // Legacy single worldline_id
+    if (worldline_id && !worldline_ids) {
+      targetWorldlineIds.push(worldline_id);
+    }
+    // Multiple new worldlines to create
+    if (new_worldlines && Array.isArray(new_worldlines)) {
+      for (const nw of new_worldlines) {
+        if (nw.name && nw.name.trim()) {
+          const wlResult = db.createWorldline(nw.name.trim(), nw.color || '#6366f1');
+          targetWorldlineIds.push(wlResult.lastInsertRowid as number);
+        }
+      }
+    }
+    // Legacy single worldline_name
+    if (worldline_name && worldline_name.trim() && !new_worldlines) {
       const wlResult = db.createWorldline(worldline_name.trim(), worldline_color || '#6366f1');
-      targetWorldlineId = wlResult.lastInsertRowid as number;
+      targetWorldlineIds.push(wlResult.lastInsertRowid as number);
     }
 
-    if (targetWorldlineId !== null) {
-      // Get existing paper count for position offset when adding to existing worldline
-      const existingPapers = worldline_id ? db.getWorldlinePapers(targetWorldlineId) : [];
-      const positionOffset = existingPapers.length;
+    // Add papers sorted by publication date
+    const sortedPapers = savedPapers.sort(
+      (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
+    );
 
-      // Add papers sorted by publication date
-      const sortedPapers = savedPapers.sort(
-        (a, b) => new Date(a.published).getTime() - new Date(b.published).getTime()
-      );
+    for (const wlId of targetWorldlineIds) {
+      const existingPapers = db.getWorldlinePapers(wlId);
+      const positionOffset = existingPapers.length;
       for (let i = 0; i < sortedPapers.length; i++) {
         try {
-          db.addWorldlinePaper(targetWorldlineId, sortedPapers[i].id, positionOffset + i);
+          db.addWorldlinePaper(wlId, sortedPapers[i].id, positionOffset + i);
         } catch {
           // paper may already be in worldline — ignore
         }
@@ -291,7 +307,7 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       success: true,
       papers_added: savedPapers.length,
       citations_created: citationsCreated,
-      worldline_id: targetWorldlineId,
+      worldline_ids: targetWorldlineIds,
       tags_applied: tagsApplied,
       errors,
     });
