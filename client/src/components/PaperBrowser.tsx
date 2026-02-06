@@ -34,6 +34,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const [similarityMap, setSimilarityMap] = useState<Map<string, WorldlineSimilarityMatch[]>>(new Map());
   const [scanningWorldlines, setScanningWorldlines] = useState(false);
   const similarityAbortRef = useRef<AbortController | null>(null);
+  const [activeTab, setActiveTab] = useState<'new' | 'cross' | 'replace'>('new');
 
   const PAGE_SIZE = 20;
 
@@ -97,6 +98,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
   async function fetchLatest() {
     setLoading(true);
+    setActiveTab('new');
     try {
       const result = await api.getLatestArxiv(selectedCategory || 'cs.AI');
       setPapers(result.papers);
@@ -152,6 +154,15 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   }
 
   const totalPages = Math.ceil(totalResults / PAGE_SIZE);
+
+  // Filter papers by announcement type tab when in latest mode
+  const newPapers = papers.filter(p => !p.announceType || p.announceType === 'new');
+  const crossPapers = papers.filter(p => p.announceType === 'cross');
+  const replacePapers = papers.filter(p => p.announceType === 'replace' || p.announceType === 'replace-cross');
+
+  const displayedPapers = isLatestMode
+    ? (activeTab === 'new' ? newPapers : activeTab === 'cross' ? crossPapers : replacePapers)
+    : papers;
 
   return (
     <div className="paper-browser">
@@ -216,6 +227,29 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
         </div>
       </div>
 
+      {isLatestMode && !loading && (
+        <div className="announcement-tabs">
+          <button
+            className={`announcement-tab ${activeTab === 'new' ? 'active' : ''}`}
+            onClick={() => setActiveTab('new')}
+          >
+            New <span className="announcement-tab-count">{newPapers.length}</span>
+          </button>
+          <button
+            className={`announcement-tab ${activeTab === 'cross' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cross')}
+          >
+            Cross-listed <span className="announcement-tab-count">{crossPapers.length}</span>
+          </button>
+          <button
+            className={`announcement-tab ${activeTab === 'replace' ? 'active' : ''}`}
+            onClick={() => setActiveTab('replace')}
+          >
+            Replacements <span className="announcement-tab-count">{replacePapers.length}</span>
+          </button>
+        </div>
+      )}
+
       {loading && <div className="loading">Searching ArXiv...</div>}
 
       {!loading && scanningWorldlines && (
@@ -224,42 +258,25 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
         </div>
       )}
 
-      {!loading && papers.length === 0 && (
-        <div className="empty-state">No papers found. Try a different category or search term.</div>
+      {!loading && displayedPapers.length === 0 && (
+        <div className="empty-state">
+          {isLatestMode && papers.length > 0
+            ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
+            : 'No papers found. Try a different category or search term.'}
+        </div>
       )}
 
       <div className="paper-list">
-        {papers.map((paper, index) => {
+        {displayedPapers.map((paper, index) => {
           const isSaved = savedPaperIds.has(paper.id);
           const isSaving = savingIds.has(paper.id);
           const isExpanded = expandedAbstracts.has(paper.id);
           const worldlineMatches = similarityMap.get(paper.id);
 
-          // Show separator before first cross-listed paper in latest mode
-          const showCrossListSeparator = isLatestMode
-            && paper.announceType === 'cross'
-            && (index === 0 || papers[index - 1]?.announceType !== 'cross');
-
-          // Show separator before first replacement paper in latest mode
-          const isReplace = paper.announceType === 'replace' || paper.announceType === 'replace-cross';
-          const prevIsReplace = papers[index - 1]?.announceType === 'replace' || papers[index - 1]?.announceType === 'replace-cross';
-          const showReplaceSeparator = isLatestMode
-            && isReplace
-            && (index === 0 || !prevIsReplace);
-
           return (
             <React.Fragment key={paper.id}>
-              {showCrossListSeparator && (
-                <div className="cross-list-separator">
-                  <span className="cross-list-separator-label">Cross-listed papers</span>
-                </div>
-              )}
-              {showReplaceSeparator && (
-                <div className="cross-list-separator">
-                  <span className="cross-list-separator-label">Replacement submissions</span>
-                </div>
-              )}
               <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
+              <span className="paper-number">{index + 1}</span>
               <div className="paper-card-header">
                 <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
                   <LaTeX>{paper.title}</LaTeX>
