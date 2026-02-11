@@ -169,7 +169,123 @@ function parseRssItem(item: RssItem, announceType?: string): ArxivPaper | null {
   return paper;
 }
 
-export async function fetchLatestArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*34;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+function parseNewListingsHtml(html: string): ArxivPaper[] {
+  const articlesMatch = html.match(/<dl id='articles'>([\s\S]*?)<\/dl>/);
+  if (!articlesMatch) return [];
+
+  const articlesHtml = articlesMatch[1];
+
+  // Split by <h3> section headers to determine announcement type
+  const sections = articlesHtml.split(/<h3>/);
+  const papers: ArxivPaper[] = [];
+
+  // Extract listing date from the page header
+  const dateMatch = html.match(/Showing new listings for \w+, (\d+ \w+ \d+)/);
+  const listingDate = dateMatch ? new Date(dateMatch[1]).toISOString() : new Date().toISOString();
+
+  for (const section of sections) {
+    let announceType: 'new' | 'cross' | 'replace' | undefined;
+    if (/New submissions/i.test(section)) {
+      announceType = 'new';
+    } else if (/Cross-list/i.test(section)) {
+      announceType = 'cross';
+    } else if (/Replacement/i.test(section)) {
+      announceType = 'replace';
+    } else {
+      continue;
+    }
+
+    // Split section into individual paper entries by <dt> tags
+    const entries = section.split(/<dt>/);
+
+    for (const entry of entries) {
+      if (!entry.includes('<dd>')) continue;
+
+      // Extract paper ID from the abs link
+      const idMatch = entry.match(/href\s*=\s*"\/abs\/([^"]+)"/);
+      if (!idMatch) continue;
+      const id = idMatch[1].replace(/v\d+$/, '');
+
+      // Extract title (after the "Title:" descriptor span)
+      const titleMatch = entry.match(/<div class='list-title[^']*'>\s*(?:<span[^>]*>Title:<\/span>)?\s*([\s\S]*?)\s*<\/div>/);
+      const title = titleMatch
+        ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+        : '';
+
+      // Extract authors from anchor tags
+      const authorsMatch = entry.match(/<div class='list-authors'>([\s\S]*?)<\/div>/);
+      const authors: string[] = [];
+      if (authorsMatch) {
+        for (const m of authorsMatch[1].matchAll(/>([^<]+)<\/a>/g)) {
+          const name = m[1].trim();
+          if (name) authors.push(name);
+        }
+      }
+
+      // Extract categories from subjects (text in parentheses like cs.AI)
+      const subjectsMatch = entry.match(/<div class='list-subjects'>([\s\S]*?)<\/div>/);
+      const categories: string[] = [];
+      if (subjectsMatch) {
+        for (const m of subjectsMatch[1].matchAll(/\(([a-z][\w-]*[.-][\w.-]*)\)/g)) {
+          categories.push(m[1]);
+        }
+      }
+
+      // Extract abstract
+      const abstractMatch = entry.match(/<p class='mathjax'>\s*([\s\S]*?)\s*<\/p>/);
+      const summary = abstractMatch
+        ? decodeHtmlEntities(abstractMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+        : '';
+
+      const paper: ArxivPaper = {
+        id,
+        title,
+        summary,
+        authors,
+        published: listingDate,
+        updated: listingDate,
+        categories,
+        pdfUrl: `https://arxiv.org/pdf/${id}`,
+        absUrl: `https://arxiv.org/abs/${id}`,
+        announceType,
+      };
+
+      papers.push(paper);
+    }
+  }
+
+  return papers;
+}
+
+async function fetchNewListingsHtml(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  const url = `https://arxiv.org/list/${encodeURIComponent(category)}/new`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArXiv listing page error: ${response.status} ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  const papers = parseNewListingsHtml(html);
+
+  if (papers.length === 0) {
+    throw new Error('No papers parsed from ArXiv listing page');
+  }
+
+  return { papers, totalResults: papers.length };
+}
+
+async function fetchLatestArxivRss(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
   const url = `https://rss.arxiv.org/rss/${encodeURIComponent(category)}`;
   const response = await fetch(url);
   if (!response.ok) {
@@ -192,6 +308,17 @@ export async function fetchLatestArxiv(category: string): Promise<{ papers: Arxi
   }
 
   return { papers, totalResults: papers.length };
+}
+
+export async function fetchLatestArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  // Primary: scrape the ArXiv new listings page (updates immediately with announcements)
+  // Fallback: RSS feed (can lag hours behind the main site)
+  try {
+    return await fetchNewListingsHtml(category);
+  } catch (err) {
+    console.warn('HTML listing fetch failed, falling back to RSS:', err);
+    return await fetchLatestArxivRss(category);
+  }
 }
 
 export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null> {
