@@ -181,33 +181,33 @@ function decodeHtmlEntities(text: string): string {
 }
 
 function parseNewListingsHtml(html: string): ArxivPaper[] {
-  const articlesMatch = html.match(/<dl id='articles'>([\s\S]*?)<\/dl>/);
-  if (!articlesMatch) return [];
+  // ArXiv uses separate <dl id='articles'> blocks for each section
+  const allBlocks = [...html.matchAll(/<dl id='articles'>([\s\S]*?)<\/dl>/g)];
+  if (allBlocks.length === 0) return [];
 
-  const articlesHtml = articlesMatch[1];
-
-  // Split by <h3> section headers to determine announcement type
-  const sections = articlesHtml.split(/<h3>/);
   const papers: ArxivPaper[] = [];
 
   // Extract listing date from the page header
   const dateMatch = html.match(/Showing new listings for \w+, (\d+ \w+ \d+)/);
   const listingDate = dateMatch ? new Date(dateMatch[1]).toISOString() : new Date().toISOString();
 
-  for (const section of sections) {
+  for (const block of allBlocks) {
+    const blockHtml = block[1];
+
+    // Determine announcement type from the <h3> header within this block
     let announceType: 'new' | 'cross' | 'replace' | undefined;
-    if (/New submissions/i.test(section)) {
+    if (/New submissions/i.test(blockHtml)) {
       announceType = 'new';
-    } else if (/Cross-list/i.test(section)) {
+    } else if (/Cross/i.test(blockHtml)) {
       announceType = 'cross';
-    } else if (/Replacement/i.test(section)) {
+    } else if (/Replacement/i.test(blockHtml)) {
       announceType = 'replace';
     } else {
       continue;
     }
 
-    // Split section into individual paper entries by <dt> tags
-    const entries = section.split(/<dt>/);
+    // Split block into individual paper entries by <dt> tags
+    const entries = blockHtml.split(/<dt>/);
 
     for (const entry of entries) {
       if (!entry.includes('<dd>')) continue;
