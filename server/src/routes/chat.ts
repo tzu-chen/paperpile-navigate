@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { getRelatedPaperTitlesByArxivId } from '../services/database';
 
 const router = Router();
 
@@ -68,6 +69,16 @@ router.post('/', async (req: Request, res: Response) => {
       // Continue without PDF — fall back to metadata-only context
     }
 
+    // Look up related papers from the same worldline(s)
+    const relatedPapers = getRelatedPaperTitlesByArxivId(paperContext.arxivId);
+    let relatedPapersSection = '';
+    if (relatedPapers.length > 0) {
+      const worldlineSections = relatedPapers.map(wl =>
+        `Worldline "${wl.worldlineName}":\n${wl.titles.map(t => `  - ${t}`).join('\n')}`
+      ).join('\n');
+      relatedPapersSection = `\n\nRelated papers in the same research thread(s):\n${worldlineSections}\n\nThe user may ask about connections between these papers. Use this context when relevant.`;
+    }
+
     // Build system prompt as content blocks with cache_control
     // so Anthropic caches the system instructions across turns.
     const systemContent = [
@@ -80,7 +91,7 @@ Authors: ${paperContext.authors.join(', ')}
 ArXiv ID: ${paperContext.arxivId}
 Categories: ${paperContext.categories.join(', ')}
 
-${pdfBase64 ? 'The full PDF of the paper is attached to the first message.' : `Abstract:\n${paperContext.summary}\n\n(The PDF could not be loaded. Answer based on the abstract above.)`}
+${pdfBase64 ? 'The full PDF of the paper is attached to the first message.' : `Abstract:\n${paperContext.summary}\n\n(The PDF could not be loaded. Answer based on the abstract above.)`}${relatedPapersSection}
 
 Help the user understand the paper, answer questions about its methodology, results, and implications. Be concise and precise in your responses.`,
         cache_control: { type: 'ephemeral' as const },
