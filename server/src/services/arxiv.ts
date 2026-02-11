@@ -194,13 +194,15 @@ function parseNewListingsHtml(html: string): ArxivPaper[] {
   for (const block of allBlocks) {
     const blockHtml = block[1];
 
-    // Determine announcement type from the <h3> header within this block
+    // Determine announcement type from the <h3> header only (not paper content)
+    const headerMatch = blockHtml.match(/<h3>([\s\S]*?)<\/h3>/);
+    const headerText = headerMatch ? headerMatch[1] : '';
     let announceType: 'new' | 'cross' | 'replace' | undefined;
-    if (/New submissions/i.test(blockHtml)) {
+    if (/New submissions/i.test(headerText)) {
       announceType = 'new';
-    } else if (/Cross/i.test(blockHtml)) {
+    } else if (/Cross/i.test(headerText)) {
       announceType = 'cross';
-    } else if (/Replacement/i.test(blockHtml)) {
+    } else if (/Replacement/i.test(headerText)) {
       announceType = 'replace';
     } else {
       continue;
