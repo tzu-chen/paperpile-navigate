@@ -185,6 +185,96 @@ Help the user understand the paper, answer questions about its methodology, resu
   }
 });
 
+// POST /api/chat/worldline - Chat about a worldline (no PDF, just titles + abstracts)
+interface WorldlineChatRequest {
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  apiKey: string;
+  worldlineContext: {
+    worldlineName: string;
+    papers: { title: string; authors: string[]; summary: string; arxivId: string }[];
+  };
+}
+
+router.post('/worldline', async (req: Request, res: Response) => {
+  try {
+    const { messages, apiKey, worldlineContext } = req.body as WorldlineChatRequest;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Claude API key is required. Please set it in Settings.' });
+    }
+
+    if (!messages || messages.length === 0) {
+      return res.status(400).json({ error: 'Messages are required' });
+    }
+
+    if (!worldlineContext || !worldlineContext.papers || worldlineContext.papers.length === 0) {
+      return res.status(400).json({ error: 'Worldline context with papers is required' });
+    }
+
+    // Build paper context section
+    const papersSection = worldlineContext.papers.map((p, i) =>
+      `Paper ${i + 1}: "${p.title}"\n  Authors: ${p.authors.join(', ')}\n  ArXiv ID: ${p.arxivId}\n  Abstract: ${p.summary}`
+    ).join('\n\n');
+
+    const systemContent = [
+      {
+        type: 'text' as const,
+        text: `You are a research assistant helping analyze a collection of related academic papers grouped under the worldline "${worldlineContext.worldlineName}".
+
+This worldline contains ${worldlineContext.papers.length} paper(s):
+
+${papersSection}
+
+Help the user understand the connections between these papers, their collective contributions, how they build on each other, and the overall research trajectory of this worldline. Be concise and precise in your responses.`,
+        cache_control: { type: 'ephemeral' as const },
+      },
+    ];
+
+    const claudeMessages = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2048,
+        system: systemContent,
+        messages: claudeMessages,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      const errorMessage = (errorData as any)?.error?.message || `API request failed with status ${response.status}`;
+      return res.status(response.status).json({ error: errorMessage });
+    }
+
+    const data = await response.json() as any;
+    const assistantMessage = data.content?.[0]?.text || 'No response generated.';
+
+    res.json({
+      message: assistantMessage,
+      model: data.model || 'unknown',
+      usage: {
+        input_tokens: data.usage?.input_tokens || 0,
+        output_tokens: data.usage?.output_tokens || 0,
+        cache_creation_input_tokens: data.usage?.cache_creation_input_tokens || 0,
+        cache_read_input_tokens: data.usage?.cache_read_input_tokens || 0,
+      },
+    });
+  } catch (error) {
+    console.error('Worldline chat error:', error);
+    res.status(500).json({ error: 'Failed to process worldline chat request' });
+  }
+});
+
 // POST /api/chat/verify-key - Verify that a Claude API key is valid
 router.post('/verify-key', async (req: Request, res: Response) => {
   try {
