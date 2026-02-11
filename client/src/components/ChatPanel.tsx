@@ -8,12 +8,21 @@ interface Props {
   showNotification: (msg: string) => void;
 }
 
+interface RelatedPaperSessions {
+  arxivId: string;
+  title: string;
+  sessions: ChatSession[];
+}
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 export default function ChatPanel({ paper, showNotification }: Props) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [relatedPaperSessions, setRelatedPaperSessions] = useState<RelatedPaperSessions[]>([]);
+  const [showRelatedSessions, setShowRelatedSessions] = useState(false);
+  const [viewingRelatedSession, setViewingRelatedSession] = useState<{ session: ChatSession; paperTitle: string } | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -30,6 +39,23 @@ export default function ChatPanel({ paper, showNotification }: Props) {
     return paperSessions;
   }, [paper.arxiv_id]);
 
+  // Load related paper sessions from papers in the same worldline
+  const loadRelatedSessions = useCallback(async () => {
+    try {
+      const relatedPapers = await api.getRelatedPaperArxivIds(paper.arxiv_id);
+      const results: RelatedPaperSessions[] = [];
+      for (const rp of relatedPapers) {
+        const rpSessions = api.getChatSessionsForPaper(rp.arxivId);
+        if (rpSessions.length > 0) {
+          results.push({ arxivId: rp.arxivId, title: rp.title, sessions: rpSessions });
+        }
+      }
+      setRelatedPaperSessions(results);
+    } catch {
+      // Silently fail — related sessions are supplementary
+    }
+  }, [paper.arxiv_id]);
+
   // Load sessions on mount; resume the most recent one if it exists
   useEffect(() => {
     const paperSessions = loadSessions();
@@ -37,7 +63,8 @@ export default function ChatPanel({ paper, showNotification }: Props) {
       setActiveSessionId(paperSessions[0].id);
       setMessages(paperSessions[0].messages);
     }
-  }, [loadSessions]);
+    loadRelatedSessions();
+  }, [loadSessions, loadRelatedSessions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -142,13 +169,36 @@ export default function ChatPanel({ paper, showNotification }: Props) {
     setActiveSessionId(newId);
     setMessages([]);
     setShowSessionList(false);
+    setViewingRelatedSession(null);
   };
 
   const handleSwitchSession = (session: ChatSession) => {
     setActiveSessionId(session.id);
     setMessages(session.messages);
     setShowSessionList(false);
+    setViewingRelatedSession(null);
   };
+
+  const handleViewRelatedSession = (session: ChatSession, paperTitle: string) => {
+    setViewingRelatedSession({ session, paperTitle });
+    setMessages(session.messages);
+    setActiveSessionId(null);
+    setShowSessionList(false);
+  };
+
+  const handleBackFromRelated = () => {
+    setViewingRelatedSession(null);
+    // Restore to current paper's most recent session
+    const paperSessions = loadSessions();
+    if (paperSessions.length > 0) {
+      setActiveSessionId(paperSessions[0].id);
+      setMessages(paperSessions[0].messages);
+    } else {
+      setMessages([]);
+    }
+  };
+
+  const totalRelatedSessionCount = relatedPaperSessions.reduce((sum, rp) => sum + rp.sessions.length, 0);
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -190,6 +240,15 @@ export default function ChatPanel({ paper, showNotification }: Props) {
         >
           History ({sessions.length})
         </button>
+        {totalRelatedSessionCount > 0 && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => { setShowRelatedSessions(!showRelatedSessions); setShowSessionList(false); }}
+            title="Chat sessions from papers in the same worldline"
+          >
+            Related ({totalRelatedSessionCount})
+          </button>
+        )}
         <button className="btn btn-primary btn-sm" onClick={handleNewChat}>
           + New Chat
         </button>
@@ -218,6 +277,41 @@ export default function ChatPanel({ paper, showNotification }: Props) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {showRelatedSessions && relatedPaperSessions.length > 0 && (
+        <div className="chat-session-list chat-related-session-list">
+          {relatedPaperSessions.map(rp => (
+            <div key={rp.arxivId} className="chat-related-paper-group">
+              <div className="chat-related-paper-title" title={rp.title}>
+                {rp.title.length > 60 ? rp.title.slice(0, 60) + '...' : rp.title}
+              </div>
+              {rp.sessions.map(s => (
+                <div
+                  key={s.id}
+                  className={`chat-session-item ${viewingRelatedSession?.session.id === s.id ? 'active' : ''}`}
+                  onClick={() => handleViewRelatedSession(s, rp.title)}
+                >
+                  <div className="chat-session-item-text">
+                    <span className="chat-session-preview">{firstUserMsg(s)}</span>
+                    <span className="chat-session-date">
+                      {new Date(s.updatedAt).toLocaleDateString()} &middot; {s.messages.length} msgs
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewingRelatedSession && (
+        <div className="chat-related-banner">
+          <span>Viewing chat from: <strong>{viewingRelatedSession.paperTitle.length > 50 ? viewingRelatedSession.paperTitle.slice(0, 50) + '...' : viewingRelatedSession.paperTitle}</strong></span>
+          <button className="btn btn-secondary btn-sm" onClick={handleBackFromRelated}>
+            Back
+          </button>
         </div>
       )}
 
@@ -279,14 +373,14 @@ export default function ChatPanel({ paper, showNotification }: Props) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasApiKey ? 'Ask about this paper...' : 'Set API key in Settings first'}
+            placeholder={viewingRelatedSession ? 'Viewing related paper chat (read-only)' : hasApiKey ? 'Ask about this paper...' : 'Set API key in Settings first'}
             rows={2}
-            disabled={!hasApiKey || loading}
+            disabled={!hasApiKey || loading || !!viewingRelatedSession}
           />
           <button
             className="btn btn-primary chat-send-btn"
             onClick={handleSend}
-            disabled={!input.trim() || loading || !hasApiKey}
+            disabled={!input.trim() || loading || !hasApiKey || !!viewingRelatedSession}
           >
             Send
           </button>
