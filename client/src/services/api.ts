@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, Citation, Worldline, SemanticScholarResult, PaperSimilarityResult } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, WorldlineChatSession, Citation, Worldline, SemanticScholarResult, PaperSimilarityResult } from '../types';
 
 const BASE = '/api';
 
@@ -311,6 +311,62 @@ export async function verifyApiKey(apiKey: string): Promise<{ valid: boolean; er
     method: 'POST',
     body: JSON.stringify({ apiKey }),
   });
+}
+
+// Worldline Chat
+export async function sendWorldlineChatMessage(
+  messages: ChatMessage[],
+  apiKey: string,
+  worldlineContext: {
+    worldlineName: string;
+    papers: { title: string; authors: string[]; summary: string; arxivId: string }[];
+  }
+): Promise<ChatResponse> {
+  return request('/chat/worldline', {
+    method: 'POST',
+    body: JSON.stringify({ messages, apiKey, worldlineContext }),
+  });
+}
+
+// Worldline Chat History (localStorage)
+const WL_CHAT_HISTORY_KEY = 'paperpile-navigate-worldline-chat-history';
+
+function loadAllWorldlineSessions(): WorldlineChatSession[] {
+  try {
+    const stored = localStorage.getItem(WL_CHAT_HISTORY_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [];
+}
+
+function persistAllWorldlineSessions(sessions: WorldlineChatSession[]): void {
+  localStorage.setItem(WL_CHAT_HISTORY_KEY, JSON.stringify(sessions));
+}
+
+export function getWorldlineChatSessions(worldlineId: number): WorldlineChatSession[] {
+  return loadAllWorldlineSessions()
+    .filter(s => s.worldlineId === worldlineId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+export function getWorldlineChatSession(sessionId: string): WorldlineChatSession | undefined {
+  return loadAllWorldlineSessions().find(s => s.id === sessionId);
+}
+
+export function saveWorldlineChatSession(session: WorldlineChatSession): void {
+  const sessions = loadAllWorldlineSessions();
+  const idx = sessions.findIndex(s => s.id === session.id);
+  if (idx >= 0) {
+    sessions[idx] = session;
+  } else {
+    sessions.push(session);
+  }
+  persistAllWorldlineSessions(sessions);
+}
+
+export function deleteWorldlineChatSession(sessionId: string): void {
+  const sessions = loadAllWorldlineSessions().filter(s => s.id !== sessionId);
+  persistAllWorldlineSessions(sessions);
 }
 
 // Citations

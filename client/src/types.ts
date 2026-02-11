@@ -123,4 +123,13 @@ export interface PaperSimilarityResult {
   matches: WorldlineSimilarityMatch[];
 }
 
+export interface WorldlineChatSession {
+  id: string;
+  worldlineId: number;
+  worldlineName: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ViewMode = 'browse' | 'library' | 'authors' | 'viewer' | 'chatHistory' | 'worldline';

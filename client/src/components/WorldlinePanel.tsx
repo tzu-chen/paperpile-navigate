@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
-import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult } from '../types';
+import Markdown from 'react-markdown';
+import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult, ChatMessage, WorldlineChatSession } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 
@@ -67,6 +68,16 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   useEffect(() => {
     localStorage.setItem('paperpile-worldline-visibility', JSON.stringify({ showCitations, showWorldlines, showNonWorldlinePapers }));
   }, [showCitations, showWorldlines, showNonWorldlinePapers]);
+
+  // Worldline chat
+  const [wlChatOpen, setWlChatOpen] = useState(false);
+  const [wlChatMessages, setWlChatMessages] = useState<ChatMessage[]>([]);
+  const [wlChatInput, setWlChatInput] = useState('');
+  const [wlChatLoading, setWlChatLoading] = useState(false);
+  const [wlChatSessionId, setWlChatSessionId] = useState<string | null>(null);
+  const [wlChatSessions, setWlChatSessions] = useState<WorldlineChatSession[]>([]);
+  const [wlChatShowHistory, setWlChatShowHistory] = useState(false);
+  const wlChatEndRef = useRef<HTMLDivElement>(null);
 
   // Collapsible sections
   const [allPapersOpen, setAllPapersOpen] = useState(true);
@@ -839,6 +850,170 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     return papers.some(p => p.arxiv_id === arxivId);
   }, [papers]);
 
+  // Load worldline chat sessions when active worldline changes
+  useEffect(() => {
+    if (activeWorldlineId !== null) {
+      const sessions = api.getWorldlineChatSessions(activeWorldlineId);
+      setWlChatSessions(sessions);
+      // Resume most recent session if available
+      if (sessions.length > 0 && !wlChatSessionId) {
+        setWlChatSessionId(sessions[0].id);
+        setWlChatMessages(sessions[0].messages);
+      }
+    } else {
+      setWlChatOpen(false);
+      setWlChatMessages([]);
+      setWlChatSessionId(null);
+      setWlChatSessions([]);
+      setWlChatShowHistory(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorldlineId]);
+
+  // Scroll chat to bottom when messages change
+  useEffect(() => {
+    wlChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [wlChatMessages]);
+
+  const generateId = (): string => {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  };
+
+  const persistWlChatSession = useCallback((sessionMessages: ChatMessage[], sessionId: string | null) => {
+    if (!sessionId || sessionMessages.length === 0 || activeWorldlineId === null) return;
+    const wl = worldlines.find(w => w.id === activeWorldlineId);
+    if (!wl) return;
+    const existing = api.getWorldlineChatSession(sessionId);
+    const session: WorldlineChatSession = {
+      id: sessionId,
+      worldlineId: activeWorldlineId,
+      worldlineName: wl.name,
+      messages: sessionMessages,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    api.saveWorldlineChatSession(session);
+    setWlChatSessions(api.getWorldlineChatSessions(activeWorldlineId));
+  }, [activeWorldlineId, worldlines]);
+
+  const handleWlChatSend = async () => {
+    const trimmed = wlChatInput.trim();
+    if (!trimmed || wlChatLoading || activeWorldlineId === null) return;
+
+    const settings = api.getSettings();
+    if (!settings.claudeApiKey) {
+      showNotification('Please set your Claude API key in Settings first.');
+      return;
+    }
+
+    const wl = worldlines.find(w => w.id === activeWorldlineId);
+    if (!wl) return;
+
+    // Build paper context from worldline papers
+    const wlPapers = papers.filter(p => wl.paperIds.has(p.id));
+    const paperContexts = wlPapers.map(p => ({
+      title: p.title,
+      authors: (() => { try { return JSON.parse(p.authors) as string[]; } catch { return []; } })(),
+      summary: p.summary,
+      arxivId: p.arxiv_id,
+    }));
+
+    let currentSessionId = wlChatSessionId;
+    if (!currentSessionId) {
+      currentSessionId = generateId();
+      setWlChatSessionId(currentSessionId);
+    }
+
+    const userMessage: ChatMessage = { role: 'user', content: trimmed };
+    const updatedMessages = [...wlChatMessages, userMessage];
+    setWlChatMessages(updatedMessages);
+    setWlChatInput('');
+    setWlChatLoading(true);
+
+    try {
+      const response = await api.sendWorldlineChatMessage(
+        updatedMessages,
+        settings.claudeApiKey,
+        { worldlineName: wl.name, papers: paperContexts }
+      );
+
+      const usage = response.usage;
+      let estimatedCost: number | undefined;
+      if (usage) {
+        const inputCost = (usage.input_tokens / 1_000_000) * 3;
+        const outputCost = (usage.output_tokens / 1_000_000) * 15;
+        estimatedCost = inputCost + outputCost;
+      }
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: response.message,
+        usage: usage ? {
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          cache_creation_input_tokens: usage.cache_creation_input_tokens,
+          cache_read_input_tokens: usage.cache_read_input_tokens,
+          estimated_cost: estimatedCost,
+          model: response.model,
+        } : undefined,
+      };
+
+      const withResponse = [...updatedMessages, assistantMessage];
+      setWlChatMessages(withResponse);
+      persistWlChatSession(withResponse, currentSessionId);
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to get response from Claude');
+      const withError = [...updatedMessages, { role: 'assistant' as const, content: 'Error: Failed to get a response. Please check your API key in Settings.' }];
+      setWlChatMessages(withError);
+      persistWlChatSession(withError, currentSessionId);
+    } finally {
+      setWlChatLoading(false);
+    }
+  };
+
+  const handleWlChatKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleWlChatSend();
+    }
+  };
+
+  const handleWlNewChat = () => {
+    const newId = generateId();
+    setWlChatSessionId(newId);
+    setWlChatMessages([]);
+    setWlChatShowHistory(false);
+  };
+
+  const handleWlSwitchSession = (session: WorldlineChatSession) => {
+    setWlChatSessionId(session.id);
+    setWlChatMessages(session.messages);
+    setWlChatShowHistory(false);
+  };
+
+  const handleWlDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    api.deleteWorldlineChatSession(sessionId);
+    if (activeWorldlineId !== null) {
+      const updated = api.getWorldlineChatSessions(activeWorldlineId);
+      setWlChatSessions(updated);
+      if (sessionId === wlChatSessionId) {
+        if (updated.length > 0) {
+          setWlChatSessionId(updated[0].id);
+          setWlChatMessages(updated[0].messages);
+        } else {
+          setWlChatSessionId(null);
+          setWlChatMessages([]);
+        }
+      }
+    }
+  };
+
+  const wlChatFirstUserMsg = (s: WorldlineChatSession) => {
+    const first = s.messages.find(m => m.role === 'user');
+    return first ? first.content.slice(0, 60) + (first.content.length > 60 ? '...' : '') : 'Empty session';
+  };
+
   // Get short first author name
   const getFirstAuthor = (p: SavedPaper): string => {
     try {
@@ -1195,6 +1370,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                     </button>
                   </div>
                   {activeWorldlineId === wl.id && (
+                    <>
                     <div className="wl-item-papers">
                       {Array.from(wl.paperIds).map(pid => {
                         const p = papers.find(pp => pp.id === pid);
@@ -1215,10 +1391,140 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                         );
                       })}
                     </div>
+                    <button
+                      className="btn btn-sm btn-primary wl-chat-toggle"
+                      onClick={() => setWlChatOpen(prev => !prev)}
+                    >
+                      {wlChatOpen ? 'Hide Chat' : 'Ask Claude'}
+                    </button>
+                    </>
                   )}
                 </div>
               ))}
             </div>
+
+            {/* Worldline Chat Panel */}
+            {wlChatOpen && activeWorldline && (
+              <div className="wl-section wl-chat-section">
+                <div className="wl-section-header">
+                  <h4>Chat: {activeWorldline.name}</h4>
+                </div>
+
+                {!api.getSettings().claudeApiKey && (
+                  <div className="wl-chat-no-key">
+                    Set your Claude API key in Settings to use chat.
+                  </div>
+                )}
+
+                {/* Session toolbar */}
+                <div className="wl-chat-session-bar">
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setWlChatShowHistory(!wlChatShowHistory)}
+                  >
+                    History ({wlChatSessions.length})
+                  </button>
+                  <button className="btn btn-primary btn-sm" onClick={handleWlNewChat}>
+                    + New
+                  </button>
+                </div>
+
+                {wlChatShowHistory && wlChatSessions.length > 0 && (
+                  <div className="wl-chat-session-list">
+                    {wlChatSessions.map(s => (
+                      <div
+                        key={s.id}
+                        className={`wl-chat-session-item ${s.id === wlChatSessionId ? 'active' : ''}`}
+                        onClick={() => handleWlSwitchSession(s)}
+                      >
+                        <div className="wl-chat-session-text">
+                          <span className="wl-chat-session-preview">{wlChatFirstUserMsg(s)}</span>
+                          <span className="wl-chat-session-date">
+                            {new Date(s.updatedAt).toLocaleDateString()} &middot; {s.messages.length} msgs
+                          </span>
+                        </div>
+                        <button
+                          className="btn-icon btn-danger-icon"
+                          onClick={e => handleWlDeleteSession(s.id, e)}
+                          title="Delete session"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="wl-chat-messages">
+                  {wlChatMessages.length === 0 && api.getSettings().claudeApiKey && (
+                    <div className="wl-chat-welcome">
+                      <p>Ask Claude about this worldline. Examples:</p>
+                      <ul>
+                        <li>"Summarize the research trajectory"</li>
+                        <li>"How do these papers connect?"</li>
+                        <li>"What are the key contributions?"</li>
+                      </ul>
+                    </div>
+                  )}
+
+                  {wlChatMessages.map((msg, i) => (
+                    <div key={i} className={`wl-chat-message wl-chat-message-${msg.role}`}>
+                      <div className="wl-chat-message-label">
+                        {msg.role === 'user' ? 'You' : 'Claude'}
+                      </div>
+                      <div className={`wl-chat-message-content ${msg.role === 'assistant' ? 'markdown-body' : ''}`}>
+                        {msg.role === 'assistant' ? (
+                          <Markdown>{msg.content}</Markdown>
+                        ) : (
+                          msg.content
+                        )}
+                      </div>
+                      {msg.role === 'assistant' && msg.usage && (
+                        <div className="wl-chat-message-usage">
+                          {msg.usage.model && <span>{msg.usage.model}</span>}
+                          <span>{msg.usage.input_tokens.toLocaleString()} in / {msg.usage.output_tokens.toLocaleString()} out</span>
+                          {msg.usage.estimated_cost !== undefined && (
+                            <span>${msg.usage.estimated_cost < 0.01
+                              ? msg.usage.estimated_cost.toFixed(4)
+                              : msg.usage.estimated_cost.toFixed(3)}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {wlChatLoading && (
+                    <div className="wl-chat-message wl-chat-message-assistant">
+                      <div className="wl-chat-message-label">Claude</div>
+                      <div className="wl-chat-message-content wl-chat-typing">
+                        Thinking...
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={wlChatEndRef} />
+                </div>
+
+                <div className="wl-chat-input-area">
+                  <textarea
+                    className="wl-chat-input"
+                    value={wlChatInput}
+                    onChange={e => setWlChatInput(e.target.value)}
+                    onKeyDown={handleWlChatKeyDown}
+                    placeholder={api.getSettings().claudeApiKey ? 'Ask about this worldline...' : 'Set API key in Settings first'}
+                    rows={2}
+                    disabled={!api.getSettings().claudeApiKey || wlChatLoading}
+                  />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleWlChatSend}
+                    disabled={!wlChatInput.trim() || wlChatLoading || !api.getSettings().claudeApiKey}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Paper list for reference */}
             <div className="wl-section">
