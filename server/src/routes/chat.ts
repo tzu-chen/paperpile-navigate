@@ -158,7 +158,16 @@ Help the user understand the paper, answer questions about its methodology, resu
     const data = await response.json() as any;
     const assistantMessage = data.content?.[0]?.text || 'No response generated.';
 
-    res.json({ message: assistantMessage });
+    res.json({
+      message: assistantMessage,
+      model: data.model || 'unknown',
+      usage: {
+        input_tokens: data.usage?.input_tokens || 0,
+        output_tokens: data.usage?.output_tokens || 0,
+        cache_creation_input_tokens: data.usage?.cache_creation_input_tokens || 0,
+        cache_read_input_tokens: data.usage?.cache_read_input_tokens || 0,
+      },
+    });
   } catch (error) {
     console.error('Chat error:', error);
     res.status(500).json({ error: 'Failed to process chat request' });

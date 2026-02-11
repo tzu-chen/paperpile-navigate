@@ -56,9 +56,19 @@ export interface CategoryGroup {
   categories: Record<string, string>;
 }
 
+export interface ChatMessageUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  estimated_cost?: number;
+  model?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  usage?: ChatMessageUsage;
 }
 
 export interface ChatSession {

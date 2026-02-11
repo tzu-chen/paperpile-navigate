@@ -202,6 +202,17 @@ export async function getFavoriteAuthorPublications(): Promise<{ papers: (ArxivP
 }
 
 // Chat
+export interface ChatResponse {
+  message: string;
+  model?: string;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+}
+
 export async function sendChatMessage(
   messages: ChatMessage[],
   apiKey: string,
@@ -212,7 +223,7 @@ export async function sendChatMessage(
     categories: string[];
     arxivId: string;
   }
-): Promise<{ message: string }> {
+): Promise<ChatResponse> {
   return request('/chat', {
     method: 'POST',
     body: JSON.stringify({ messages, apiKey, paperContext }),

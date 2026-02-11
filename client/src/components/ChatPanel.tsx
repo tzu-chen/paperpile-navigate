@@ -94,7 +94,30 @@ export default function ChatPanel({ paper, showNotification }: Props) {
         }
       );
 
-      const withResponse = [...updatedMessages, { role: 'assistant' as const, content: response.message }];
+      // Calculate estimated cost based on model pricing
+      const usage = response.usage;
+      let estimatedCost: number | undefined;
+      if (usage) {
+        // Pricing per token for claude-sonnet-4: $3/M input, $15/M output
+        const inputCost = (usage.input_tokens / 1_000_000) * 3;
+        const outputCost = (usage.output_tokens / 1_000_000) * 15;
+        estimatedCost = inputCost + outputCost;
+      }
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: response.message,
+        usage: usage ? {
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          cache_creation_input_tokens: usage.cache_creation_input_tokens,
+          cache_read_input_tokens: usage.cache_read_input_tokens,
+          estimated_cost: estimatedCost,
+          model: response.model,
+        } : undefined,
+      };
+
+      const withResponse = [...updatedMessages, assistantMessage];
       setMessages(withResponse);
       persistSession(withResponse, currentSessionId);
     } catch (err: any) {
@@ -223,6 +246,17 @@ export default function ChatPanel({ paper, showNotification }: Props) {
                 msg.content
               )}
             </div>
+            {msg.role === 'assistant' && msg.usage && (
+              <div className="chat-message-usage">
+                {msg.usage.model && <span>{msg.usage.model}</span>}
+                <span>{msg.usage.input_tokens.toLocaleString()} in / {msg.usage.output_tokens.toLocaleString()} out</span>
+                {msg.usage.estimated_cost !== undefined && (
+                  <span>${msg.usage.estimated_cost < 0.01
+                    ? msg.usage.estimated_cost.toFixed(4)
+                    : msg.usage.estimated_cost.toFixed(3)}</span>
+                )}
+              </div>
+            )}
           </div>
         ))}
 
