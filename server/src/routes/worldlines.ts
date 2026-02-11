@@ -317,6 +317,20 @@ router.post('/batch-import', async (req: Request, res: Response) => {
   }
 });
 
+// --- Related Papers ---
+
+// GET /api/worldlines/related-papers/:arxivId — get arxiv IDs of papers in the same worldlines
+router.get('/related-papers/:arxivId', (req: Request, res: Response) => {
+  try {
+    const arxivId = String(req.params.arxivId);
+    const related = db.getRelatedPaperArxivIdsByArxivId(arxivId);
+    res.json(related);
+  } catch (error) {
+    console.error('Get related papers error:', error);
+    res.status(500).json({ error: 'Failed to get related papers' });
+  }
+});
+
 // --- Citations ---
 
 // GET /api/worldlines/citations - Get all citations

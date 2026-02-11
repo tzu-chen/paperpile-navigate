@@ -328,6 +328,25 @@ export function getAllWorldlinesWithPapers(): {
   }));
 }
 
+// Get arxiv_ids of papers that share a worldline with the given paper
+export function getRelatedPaperArxivIdsByArxivId(arxivId: string): { arxivId: string; title: string }[] {
+  const paper = db.prepare('SELECT id FROM papers WHERE arxiv_id = ?').get(arxivId) as { id: number } | undefined;
+  if (!paper) return [];
+
+  const rows = db.prepare(`
+    SELECT DISTINCT p.arxiv_id, p.title FROM papers p
+    JOIN worldline_papers wp ON p.id = wp.paper_id
+    WHERE wp.worldline_id IN (
+      SELECT wp2.worldline_id FROM worldline_papers wp2
+      JOIN papers p2 ON p2.id = wp2.paper_id
+      WHERE p2.arxiv_id = ?
+    ) AND p.arxiv_id != ?
+    ORDER BY p.published ASC
+  `).all(arxivId, arxivId) as { arxiv_id: string; title: string }[];
+
+  return rows.map(r => ({ arxivId: r.arxiv_id, title: r.title }));
+}
+
 // Get titles of papers that share a worldline with the given paper (by arxiv_id)
 export function getRelatedPaperTitlesByArxivId(arxivId: string): { worldlineName: string; titles: string[] }[] {
   const paper = db.prepare('SELECT id FROM papers WHERE arxiv_id = ?').get(arxivId) as { id: number } | undefined;

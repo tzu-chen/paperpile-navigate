@@ -342,6 +342,11 @@ export async function importCitedPaper(
   });
 }
 
+// Related Papers (same worldline)
+export async function getRelatedPaperArxivIds(arxivId: string): Promise<{ arxivId: string; title: string }[]> {
+  return request(`/worldlines/related-papers/${encodeURIComponent(arxivId)}`);
+}
+
 // Worldline Similarity
 export async function checkWorldlineSimilarity(
   papers: { id: string; title: string; summary: string }[],
