@@ -11,6 +11,7 @@ export interface ArxivPaper {
   doi?: string;
   journalRef?: string;
   announceType?: 'new' | 'cross' | 'replace' | 'replace-cross';
+  listingDate?: string;
 }
 
 export interface SavedPaper {
