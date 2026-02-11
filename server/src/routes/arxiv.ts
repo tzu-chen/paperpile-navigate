@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { searchArxiv, getArxivPaper, fetchLatestArxiv, fetchRecentArxiv } from '../services/arxiv';
 import { ARXIV_CATEGORY_GROUPS } from '../types';
+import { getLocalPdfPathForArxivId } from '../services/pdf';
 
 const router = Router();
 
@@ -77,8 +78,16 @@ router.get('/paper/:id(*)', async (req: Request, res: Response) => {
 router.get('/pdf-proxy/:id(*)', async (req: Request, res: Response) => {
   try {
     const arxivId = String(req.params.id);
-    const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
 
+    // Serve from local storage if available
+    const localPath = getLocalPdfPathForArxivId(arxivId);
+    if (localPath) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${arxivId.replace('/', '_')}.pdf"`);
+      return res.sendFile(localPath);
+    }
+
+    const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
     const response = await fetch(pdfUrl);
     if (!response.ok) {
       return res.status(response.status).json({ error: 'Failed to fetch PDF' });

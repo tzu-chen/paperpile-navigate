@@ -29,6 +29,7 @@ export interface SavedPaper {
   journal_ref: string | null;
   added_at: string;
   status: 'new' | 'reading' | 'reviewed' | 'exported';
+  pdf_path: string | null;
 }
 
 export interface Comment {

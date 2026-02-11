@@ -98,6 +98,12 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_worldline_papers_worldline ON worldline_papers(worldline_id);
     CREATE INDEX IF NOT EXISTS idx_worldline_papers_paper ON worldline_papers(paper_id);
   `);
+
+  // Migration: add pdf_path column if it doesn't exist
+  const columns = db.prepare("PRAGMA table_info('papers')").all() as { name: string }[];
+  if (!columns.some(c => c.name === 'pdf_path')) {
+    db.exec("ALTER TABLE papers ADD COLUMN pdf_path TEXT");
+  }
 }
 
 // Paper operations
@@ -373,6 +379,49 @@ export function getRelatedPaperTitlesByArxivId(arxivId: string): { worldlineName
       titles: (titlesStmt.all(wl.id, paper.id) as { title: string }[]).map(r => r.title),
     }))
     .filter(wl => wl.titles.length > 0);
+}
+
+// PDF path operations
+export function updatePaperPdfPath(id: number, pdfPath: string | null) {
+  return db.prepare('UPDATE papers SET pdf_path = ? WHERE id = ?').run(pdfPath, id);
+}
+
+// Bulk operations
+export function getPapersByIds(paperIds: number[]) {
+  if (paperIds.length === 0) return [];
+  const placeholders = paperIds.map(() => '?').join(',');
+  return db.prepare(`SELECT * FROM papers WHERE id IN (${placeholders})`).all(...paperIds);
+}
+
+export function bulkUpdateStatus(paperIds: number[], status: string) {
+  if (paperIds.length === 0) return { changes: 0 };
+  const placeholders = paperIds.map(() => '?').join(',');
+  return db.prepare(`UPDATE papers SET status = ? WHERE id IN (${placeholders})`).run(status, ...paperIds);
+}
+
+export function bulkDeletePapers(paperIds: number[]) {
+  if (paperIds.length === 0) return { changes: 0 };
+  const placeholders = paperIds.map(() => '?').join(',');
+  return db.prepare(`DELETE FROM papers WHERE id IN (${placeholders})`).run(...paperIds);
+}
+
+export function bulkAddPaperTag(paperIds: number[], tagId: number) {
+  const stmt = db.prepare('INSERT OR IGNORE INTO paper_tags (paper_id, tag_id) VALUES (?, ?)');
+  const insertMany = db.transaction((ids: number[]) => {
+    let count = 0;
+    for (const id of ids) {
+      const result = stmt.run(id, tagId);
+      count += result.changes;
+    }
+    return count;
+  });
+  return insertMany(paperIds);
+}
+
+export function bulkRemovePaperTag(paperIds: number[], tagId: number) {
+  if (paperIds.length === 0) return { changes: 0 };
+  const placeholders = paperIds.map(() => '?').join(',');
+  return db.prepare(`DELETE FROM paper_tags WHERE tag_id = ? AND paper_id IN (${placeholders})`).run(tagId, ...paperIds);
 }
 
 export default db;

@@ -44,6 +44,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   // Batch import state
   const [showBatchImport, setShowBatchImport] = useState(false);
 
+  // Bulk selection state
+  const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
+
   useEffect(() => {
     if (filterTag === null) {
       setTaggedPaperIds(null);
@@ -74,6 +79,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     });
   }, [filterWorldline, papers]);
 
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedPaperIds(new Set());
+  }, [filterStatus, filterTag, filterWorldline, searchTerm]);
+
   const filteredPapers = papers.filter(p => {
     if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
     if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
@@ -87,6 +97,25 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     return true;
   });
 
+  // Selection helpers
+  function toggleSelection(paperId: number) {
+    setSelectedPaperIds(prev => {
+      const next = new Set(prev);
+      if (next.has(paperId)) next.delete(paperId);
+      else next.add(paperId);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setSelectedPaperIds(new Set(filteredPapers.map(p => p.id)));
+  }
+
+  function selectNone() {
+    setSelectedPaperIds(new Set());
+  }
+
+  // Individual paper handlers
   async function handleDelete(paper: SavedPaper) {
     if (!confirm(`Delete "${paper.title}" from your library?`)) return;
     try {
@@ -134,6 +163,105 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   function handleExportAll() {
     const ids = filteredPapers.map(p => p.id);
     window.open(api.getBibtexUrl(undefined, true, ids), '_blank');
+  }
+
+  // Bulk operation handlers
+  async function handleBulkDownloadPdfs() {
+    setBulkLoading(true);
+    setBulkAction('Downloading PDFs');
+    try {
+      const result = await api.bulkDownloadPdfs(Array.from(selectedPaperIds));
+      showNotification(`Downloaded ${result.downloaded} PDFs${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to download PDFs');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
+  }
+
+  async function handleBulkDeletePdfs() {
+    if (!confirm(`Delete local PDFs for ${selectedPaperIds.size} paper(s)?`)) return;
+    setBulkLoading(true);
+    setBulkAction('Deleting PDFs');
+    try {
+      const result = await api.bulkDeletePdfs(Array.from(selectedPaperIds));
+      showNotification(`Deleted ${result.deleted} local PDF(s)`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to delete PDFs');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedPaperIds.size} paper(s) from your library? This cannot be undone.`)) return;
+    setBulkLoading(true);
+    setBulkAction('Deleting papers');
+    try {
+      const result = await api.bulkDeletePapers(Array.from(selectedPaperIds));
+      showNotification(`Deleted ${result.deleted} paper(s)`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to delete papers');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
+  }
+
+  async function handleBulkStatusChange(status: string) {
+    setBulkLoading(true);
+    setBulkAction('Updating status');
+    try {
+      const result = await api.bulkUpdateStatus(Array.from(selectedPaperIds), status);
+      showNotification(`Updated status for ${result.updated} paper(s)`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to update status');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
+  }
+
+  async function handleBulkAddTag(tagId: number) {
+    setBulkLoading(true);
+    setBulkAction('Adding tag');
+    try {
+      const result = await api.bulkAddTag(Array.from(selectedPaperIds), tagId);
+      showNotification(`Added tag to ${result.applied} paper(s)`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to add tag');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
+  }
+
+  async function handleBulkRemoveTag(tagId: number) {
+    setBulkLoading(true);
+    setBulkAction('Removing tag');
+    try {
+      const result = await api.bulkRemoveTag(Array.from(selectedPaperIds), tagId);
+      showNotification(`Removed tag from ${result.removed} paper(s)`);
+      setSelectedPaperIds(new Set());
+      await onRefresh();
+    } catch {
+      showNotification('Failed to remove tag');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
+    }
   }
 
   const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || searchTerm !== '';
@@ -282,6 +410,60 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         />
       )}
 
+      {/* Bulk operations toolbar */}
+      {selectedPaperIds.size > 0 && (
+        <div className="bulk-toolbar">
+          <span className="bulk-count">{selectedPaperIds.size} selected</span>
+          <button className="btn btn-secondary btn-sm" onClick={selectAll} disabled={bulkLoading}>
+            Select All ({filteredPapers.length})
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={selectNone} disabled={bulkLoading}>
+            Deselect All
+          </button>
+          <span className="bulk-separator" />
+          <button className="btn btn-primary btn-sm" onClick={handleBulkDownloadPdfs} disabled={bulkLoading}>
+            Download PDFs
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleBulkDeletePdfs} disabled={bulkLoading}>
+            Delete PDFs
+          </button>
+          <select
+            onChange={e => { if (e.target.value) handleBulkStatusChange(e.target.value); e.target.value = ''; }}
+            defaultValue=""
+            disabled={bulkLoading}
+          >
+            <option value="">Set Status...</option>
+            {Object.entries(STATUS_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <select
+            onChange={e => { if (e.target.value) handleBulkAddTag(parseInt(e.target.value, 10)); e.target.value = ''; }}
+            defaultValue=""
+            disabled={bulkLoading}
+          >
+            <option value="">Add Tag...</option>
+            {tags.map(tag => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+          <select
+            onChange={e => { if (e.target.value) handleBulkRemoveTag(parseInt(e.target.value, 10)); e.target.value = ''; }}
+            defaultValue=""
+            disabled={bulkLoading}
+          >
+            <option value="">Remove Tag...</option>
+            {tags.map(tag => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+          <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkLoading}>
+            Delete Papers
+          </button>
+          {bulkLoading && <span className="bulk-status">{bulkAction}...</span>}
+        </div>
+      )}
+
       {filteredPapers.length === 0 ? (
         <div className="empty-state">
           {papers.length === 0
@@ -295,11 +477,19 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             const categories = JSON.parse(paper.categories) as string[];
 
             return (
-              <div key={paper.id} className="paper-card library-card">
+              <div key={paper.id} className={`paper-card library-card${selectedPaperIds.has(paper.id) ? ' selected' : ''}`}>
                 <div className="paper-card-header">
-                  <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
-                    <LaTeX>{paper.title}</LaTeX>
-                  </h3>
+                  <div className="paper-select-title">
+                    <input
+                      type="checkbox"
+                      checked={selectedPaperIds.has(paper.id)}
+                      onChange={() => toggleSelection(paper.id)}
+                      className="paper-checkbox"
+                    />
+                    <h3 className="paper-title" onClick={() => onOpenPaper(paper)}>
+                      <LaTeX>{paper.title}</LaTeX>
+                    </h3>
+                  </div>
                   <div className="paper-actions">
                     <select
                       value={paper.status}
@@ -356,6 +546,9 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                     style={{ backgroundColor: STATUS_COLORS[paper.status] }}
                   >
                     {STATUS_LABELS[paper.status]}
+                  </span>
+                  <span className={`pdf-badge ${paper.pdf_path ? 'pdf-badge-local' : 'pdf-badge-none'}`}>
+                    {paper.pdf_path ? 'PDF' : 'No PDF'}
                   </span>
                 </div>
               </div>

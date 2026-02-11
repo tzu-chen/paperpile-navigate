@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
 import { getRelatedPaperTitlesByArxivId } from '../services/database';
+import { getLocalPdfPathForArxivId } from '../services/pdf';
 
 const router = Router();
 
@@ -12,6 +14,15 @@ async function fetchPdfBase64(arxivId: string): Promise<string> {
   const cached = pdfCache.get(arxivId);
   if (cached && Date.now() - cached.fetchedAt < PDF_CACHE_TTL) {
     return cached.data;
+  }
+
+  // Check for local PDF first
+  const localPath = getLocalPdfPathForArxivId(arxivId);
+  if (localPath) {
+    const buffer = fs.readFileSync(localPath);
+    const base64 = buffer.toString('base64');
+    pdfCache.set(arxivId, { data: base64, fetchedAt: Date.now() });
+    return base64;
   }
 
   const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
