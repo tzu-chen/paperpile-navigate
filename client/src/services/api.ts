@@ -39,6 +39,10 @@ export async function getLatestArxiv(category: string): Promise<{ papers: ArxivP
   return request(`/arxiv/latest?category=${encodeURIComponent(category)}`);
 }
 
+export async function getRecentArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  return request(`/arxiv/recent?category=${encodeURIComponent(category)}`);
+}
+
 export function getPdfProxyUrl(arxivId: string): string {
   return `${BASE}/arxiv/pdf-proxy/${arxivId}`;
 }

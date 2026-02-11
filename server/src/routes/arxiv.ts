@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { searchArxiv, getArxivPaper, fetchLatestArxiv } from '../services/arxiv';
+import { searchArxiv, getArxivPaper, fetchLatestArxiv, fetchRecentArxiv } from '../services/arxiv';
 import { ARXIV_CATEGORY_GROUPS } from '../types';
 
 const router = Router();
@@ -44,6 +44,18 @@ router.get('/latest', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('ArXiv latest fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch latest ArXiv papers' });
+  }
+});
+
+// GET /api/arxiv/recent - Get papers from recent days (past ~5 business days)
+router.get('/recent', async (req: Request, res: Response) => {
+  try {
+    const { category = 'cs.AI' } = req.query as Record<string, string>;
+    const result = await fetchRecentArxiv(category);
+    res.json(result);
+  } catch (error) {
+    console.error('ArXiv recent fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch recent ArXiv papers' });
   }
 });
 
