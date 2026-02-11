@@ -326,6 +326,103 @@ export async function fetchLatestArxiv(category: string): Promise<{ papers: Arxi
   }
 }
 
+function parseRecentListingsHtml(html: string): ArxivPaper[] {
+  // The /recent page has a single <dl id='articles'> block with <h3> date headers
+  // interspersed among <dt>/<dd> entries. Cross-listed papers have
+  // "(cross-list from cs.XX)" in their <dt> block.
+  const dlMatch = html.match(/<dl id='articles'>([\s\S]*?)<\/dl>/);
+  if (!dlMatch) return [];
+
+  const dlContent = dlMatch[1];
+  const papers: ArxivPaper[] = [];
+
+  // Split by <h3> to get date sections. First element is before any <h3>.
+  const sections = dlContent.split(/<h3>/);
+
+  for (const section of sections) {
+    // Extract date from the h3 content (e.g. "Wed, 11 Feb 2026 (showing ...)")
+    const dateMatch = section.match(/^\s*(\w+,\s+\d+\s+\w+\s+\d+)/);
+    if (!dateMatch) continue;
+    const listingDate = new Date(dateMatch[1]).toISOString();
+
+    // Split into individual entries by <dt>
+    const entries = section.split(/<dt>/);
+
+    for (const entry of entries) {
+      if (!entry.includes('<dd>')) continue;
+
+      // Extract paper ID from the abs link
+      const idMatch = entry.match(/href\s*=\s*"\/abs\/([^"]+)"/);
+      if (!idMatch) continue;
+      const id = idMatch[1].replace(/v\d+$/, '');
+
+      // Detect cross-listed papers
+      const isCrossListed = /\(cross-list from\s+[\w.-]+\)/.test(entry);
+      const announceType: 'new' | 'cross' = isCrossListed ? 'cross' : 'new';
+
+      // Extract title
+      const titleMatch = entry.match(/<div class='list-title[^']*'>\s*(?:<span[^>]*>Title:<\/span>)?\s*([\s\S]*?)\s*<\/div>/);
+      const title = titleMatch
+        ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+        : '';
+
+      // Extract authors from anchor tags
+      const authorsMatch = entry.match(/<div class='list-authors'>([\s\S]*?)<\/div>/);
+      const authors: string[] = [];
+      if (authorsMatch) {
+        for (const m of authorsMatch[1].matchAll(/>([^<]+)<\/a>/g)) {
+          const name = m[1].trim();
+          if (name) authors.push(name);
+        }
+      }
+
+      // Extract categories
+      const subjectsMatch = entry.match(/<div class='list-subjects'>([\s\S]*?)<\/div>/);
+      const categories: string[] = [];
+      if (subjectsMatch) {
+        for (const m of subjectsMatch[1].matchAll(/\(([a-z][\w-]*[.-][\w.-]*)\)/g)) {
+          categories.push(m[1]);
+        }
+      }
+
+      // Extract abstract (not present on the /recent page, but check anyway)
+      const abstractMatch = entry.match(/<p class='mathjax'>\s*([\s\S]*?)\s*<\/p>/);
+      const summary = abstractMatch
+        ? decodeHtmlEntities(abstractMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+        : '';
+
+      papers.push({
+        id,
+        title,
+        summary,
+        authors,
+        published: listingDate,
+        updated: listingDate,
+        categories,
+        pdfUrl: `https://arxiv.org/pdf/${id}`,
+        absUrl: `https://arxiv.org/abs/${id}`,
+        announceType,
+        listingDate,
+      });
+    }
+  }
+
+  return papers;
+}
+
+export async function fetchRecentArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  const url = `https://arxiv.org/list/${encodeURIComponent(category)}/recent?show=2000`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArXiv recent listing error: ${response.status} ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  const papers = parseRecentListingsHtml(html);
+
+  return { papers, totalResults: papers.length };
+}
+
 export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null> {
   const url = `${ARXIV_API_BASE}?id_list=${arxivId}`;
   const response = await fetch(url);

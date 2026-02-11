@@ -50,8 +50,10 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   }, []);
 
   useEffect(() => {
-    if (usesListingsPage) {
+    if (isLatestMode) {
       fetchLatest();
+    } else if (isRecentlyUpdatedMode) {
+      fetchRecent();
     } else {
       performSearch(0);
     }
@@ -112,9 +114,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
   async function fetchLatest() {
     setLoading(true);
-    if (!isRecentlyUpdatedMode) {
-      setActiveTab('new');
-    }
+    setActiveTab('new');
     try {
       const result = await api.getLatestArxiv(selectedCategory || 'cs.AI');
       setPapers(result.papers);
@@ -122,6 +122,20 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
       setPage(0);
     } catch (err) {
       console.error('Failed to fetch latest:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchRecent() {
+    setLoading(true);
+    try {
+      const result = await api.getRecentArxiv(selectedCategory || 'cs.AI');
+      setPapers(result.papers);
+      setTotalResults(result.totalResults);
+      setPage(0);
+    } catch (err) {
+      console.error('Failed to fetch recent:', err);
     } finally {
       setLoading(false);
     }
@@ -183,11 +197,11 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const newPapers = papers.filter(p => !p.announceType || p.announceType === 'new');
   const crossPapers = papers.filter(p => p.announceType === 'cross');
   const replacePapers = papers.filter(p => p.announceType === 'replace' || p.announceType === 'replace-cross');
-  // Recently updated: only 'replace' type, exclude crosslist ('replace-cross')
-  const recentlyUpdatedPapers = papers.filter(p => p.announceType === 'replace');
+  // Recently updated: new submissions only, exclude crosslist papers
+  const recentNonCrossPapers = papers.filter(p => p.announceType !== 'cross');
 
   const displayedPapers = isRecentlyUpdatedMode
-    ? recentlyUpdatedPapers
+    ? recentNonCrossPapers
     : isLatestMode
       ? (activeTab === 'new' ? newPapers : activeTab === 'cross' ? crossPapers : replacePapers)
       : papers;
@@ -228,13 +242,15 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    if (!searchQuery && (sortBy === 'submittedDate' || sortBy === 'lastUpdatedDate')) fetchLatest();
+                    if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                    else if (!searchQuery && sortBy === 'lastUpdatedDate') fetchRecent();
                     else performSearch(0);
                   }
                 }}
               />
               <button onClick={() => {
-                if (!searchQuery && (sortBy === 'submittedDate' || sortBy === 'lastUpdatedDate')) fetchLatest();
+                if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                else if (!searchQuery && sortBy === 'lastUpdatedDate') fetchRecent();
                 else performSearch(0);
               }} className="btn btn-primary">
                 Search
@@ -289,7 +305,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
       {!loading && displayedPapers.length === 0 && (
         <div className="empty-state">
           {isRecentlyUpdatedMode
-            ? 'No recently updated papers in this announcement.'
+            ? 'No recent papers found for this category.'
             : isLatestMode && papers.length > 0
               ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
               : 'No papers found. Try a different category or search term.'}
