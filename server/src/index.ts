@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { initializeDatabase } from './services/database';
+import { initializePdfStorage } from './services/pdf';
 import arxivRoutes from './routes/arxiv';
 import papersRoutes from './routes/papers';
 import tagsRoutes from './routes/tags';
@@ -35,6 +36,7 @@ app.get('*', (_req, res) => {
 
 // Initialize database and start server
 initializeDatabase();
+initializePdfStorage();
 console.log('Database initialized');
 
 app.listen(PORT, () => {

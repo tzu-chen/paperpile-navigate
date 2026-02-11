@@ -89,6 +89,78 @@ export async function deletePaper(id: number): Promise<void> {
   await request(`/papers/${id}`, { method: 'DELETE' });
 }
 
+// PDF Management
+export function getLocalPdfUrl(paperId: number): string {
+  return `${BASE}/papers/${paperId}/pdf`;
+}
+
+export async function deleteLocalPdf(paperId: number): Promise<void> {
+  await request(`/papers/${paperId}/pdf`, { method: 'DELETE' });
+}
+
+// Bulk Operations
+export async function bulkDownloadPdfs(paperIds: number[]): Promise<{
+  success: boolean;
+  downloaded: number;
+  failed: number;
+  errors: string[];
+}> {
+  return request('/papers/bulk/download-pdfs', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds }),
+  });
+}
+
+export async function bulkDeletePdfs(paperIds: number[]): Promise<{
+  success: boolean;
+  deleted: number;
+}> {
+  return request('/papers/bulk/delete-pdfs', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds }),
+  });
+}
+
+export async function bulkDeletePapers(paperIds: number[]): Promise<{
+  success: boolean;
+  deleted: number;
+}> {
+  return request('/papers/bulk/delete', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds }),
+  });
+}
+
+export async function bulkUpdateStatus(paperIds: number[], status: string): Promise<{
+  success: boolean;
+  updated: number;
+}> {
+  return request('/papers/bulk/status', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds, status }),
+  });
+}
+
+export async function bulkAddTag(paperIds: number[], tagId: number): Promise<{
+  success: boolean;
+  applied: number;
+}> {
+  return request('/papers/bulk/add-tag', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds, tag_id: tagId }),
+  });
+}
+
+export async function bulkRemoveTag(paperIds: number[], tagId: number): Promise<{
+  success: boolean;
+  removed: number;
+}> {
+  return request('/papers/bulk/remove-tag', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds, tag_id: tagId }),
+  });
+}
+
 // Comments
 export async function getComments(paperId: number): Promise<Comment[]> {
   return request(`/papers/${paperId}/comments`);

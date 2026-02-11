@@ -216,7 +216,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
       <div className="viewer-body">
         <div className="viewer-pdf">
           <PDFViewer
-            pdfUrl={api.getPdfProxyUrl(arxivId)}
+            pdfUrl={saved?.pdf_path ? api.getLocalPdfUrl(saved.id) : api.getPdfProxyUrl(arxivId)}
             onPageChange={setCurrentPage}
             immersiveMode={immersiveMode}
             onToggleImmersive={() => setImmersiveMode(m => !m)}
