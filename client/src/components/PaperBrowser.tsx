@@ -42,13 +42,15 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
   // Whether we're showing the latest announcement (RSS) vs paginated search
   const isLatestMode = sortBy === 'submittedDate' && !searchQuery;
+  const isRecentlyUpdatedMode = sortBy === 'lastUpdatedDate' && !searchQuery;
+  const usesListingsPage = isLatestMode || isRecentlyUpdatedMode;
 
   useEffect(() => {
     api.getCategories().then(setCategoryGroups).catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (isLatestMode) {
+    if (usesListingsPage) {
       fetchLatest();
     } else {
       performSearch(0);
@@ -110,7 +112,9 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
   async function fetchLatest() {
     setLoading(true);
-    setActiveTab('new');
+    if (!isRecentlyUpdatedMode) {
+      setActiveTab('new');
+    }
     try {
       const result = await api.getLatestArxiv(selectedCategory || 'cs.AI');
       setPapers(result.papers);
@@ -179,10 +183,14 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const newPapers = papers.filter(p => !p.announceType || p.announceType === 'new');
   const crossPapers = papers.filter(p => p.announceType === 'cross');
   const replacePapers = papers.filter(p => p.announceType === 'replace' || p.announceType === 'replace-cross');
+  // Recently updated: only 'replace' type, exclude crosslist ('replace-cross')
+  const recentlyUpdatedPapers = papers.filter(p => p.announceType === 'replace');
 
-  const displayedPapers = isLatestMode
-    ? (activeTab === 'new' ? newPapers : activeTab === 'cross' ? crossPapers : replacePapers)
-    : papers;
+  const displayedPapers = isRecentlyUpdatedMode
+    ? recentlyUpdatedPapers
+    : isLatestMode
+      ? (activeTab === 'new' ? newPapers : activeTab === 'cross' ? crossPapers : replacePapers)
+      : papers;
 
   return (
     <div className="paper-browser">
@@ -220,13 +228,13 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                    if (!searchQuery && (sortBy === 'submittedDate' || sortBy === 'lastUpdatedDate')) fetchLatest();
                     else performSearch(0);
                   }
                 }}
               />
               <button onClick={() => {
-                if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
+                if (!searchQuery && (sortBy === 'submittedDate' || sortBy === 'lastUpdatedDate')) fetchLatest();
                 else performSearch(0);
               }} className="btn btn-primary">
                 Search
@@ -280,9 +288,11 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
       {!loading && displayedPapers.length === 0 && (
         <div className="empty-state">
-          {isLatestMode && papers.length > 0
-            ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
-            : 'No papers found. Try a different category or search term.'}
+          {isRecentlyUpdatedMode
+            ? 'No recently updated papers in this announcement.'
+            : isLatestMode && papers.length > 0
+              ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
+              : 'No papers found. Try a different category or search term.'}
         </div>
       )}
 
@@ -293,8 +303,27 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
           const isExpanded = expandedAbstracts.has(paper.id);
           const worldlineMatches = similarityMap.get(paper.id);
 
+          // Show date separator when listing date changes between papers
+          const prevPaper = index > 0 ? displayedPapers[index - 1] : null;
+          const showDateSeparator = isRecentlyUpdatedMode && paper.listingDate && (
+            !prevPaper || !prevPaper.listingDate ||
+            new Date(paper.listingDate).toDateString() !== new Date(prevPaper.listingDate).toDateString()
+          );
+
           return (
             <React.Fragment key={paper.id}>
+              {showDateSeparator && (
+                <div className="date-separator">
+                  <span className="date-separator-text">
+                    {new Date(paper.listingDate!).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              )}
               <div className="paper-card-row">
               <span className="paper-number">{index + 1}</span>
               <div className={`paper-card ${worldlineMatches ? 'has-worldline-match' : ''}`}>
@@ -397,7 +426,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
         })}
       </div>
 
-      {!isLatestMode && totalPages > 1 && (
+      {!usesListingsPage && totalPages > 1 && (
         <div className="pagination">
           <button
             className="btn btn-secondary"

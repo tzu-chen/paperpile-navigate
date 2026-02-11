@@ -150,16 +150,18 @@ function parseRssItem(item: RssItem, announceType?: string): ArxivPaper | null {
   const pubDate = item.pubDate?.[0] || new Date().toISOString();
   const categories = item.category || [];
 
+  const isoDate = new Date(pubDate).toISOString();
   const paper: ArxivPaper = {
     id,
     title: (item.title?.[0] || '').replace(/\s+/g, ' ').trim(),
     summary: summary.replace(/\s+/g, ' ').trim(),
     authors,
-    published: new Date(pubDate).toISOString(),
-    updated: new Date(pubDate).toISOString(),
+    published: isoDate,
+    updated: isoDate,
     categories,
     pdfUrl: `https://arxiv.org/pdf/${id}`,
     absUrl: `https://arxiv.org/abs/${id}`,
+    listingDate: isoDate,
   };
 
   if (announceType === 'new' || announceType === 'cross' || announceType === 'replace' || announceType === 'replace-cross') {
@@ -261,6 +263,7 @@ function parseNewListingsHtml(html: string): ArxivPaper[] {
         pdfUrl: `https://arxiv.org/pdf/${id}`,
         absUrl: `https://arxiv.org/abs/${id}`,
         announceType,
+        listingDate,
       };
 
       papers.push(paper);
