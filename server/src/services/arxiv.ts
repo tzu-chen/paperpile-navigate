@@ -327,26 +327,25 @@ export async function fetchLatestArxiv(category: string): Promise<{ papers: Arxi
 }
 
 function parseRecentListingsHtml(html: string): ArxivPaper[] {
-  // The /recent page has a single <dl id='articles'> block with <h3> date headers
-  // interspersed among <dt>/<dd> entries. Cross-listed papers have
-  // "(cross-list from cs.XX)" in their <dt> block.
-  const dlMatch = html.match(/<dl id='articles'>([\s\S]*?)<\/dl>/);
-  if (!dlMatch) return [];
+  // The /recent page has one <dl id='articles'> block per day, each preceded
+  // by an <h3> date header. Cross-listed papers have "(cross-list from cs.XX)"
+  // in their <dt> block.
+  const allBlocks = [...html.matchAll(/<dl id='articles'>\s*<h3>([\s\S]*?)<\/h3>([\s\S]*?)<\/dl>/g)];
+  if (allBlocks.length === 0) return [];
 
-  const dlContent = dlMatch[1];
   const papers: ArxivPaper[] = [];
 
-  // Split by <h3> to get date sections. First element is before any <h3>.
-  const sections = dlContent.split(/<h3>/);
+  for (const block of allBlocks) {
+    const headerText = block[1];
+    const blockHtml = block[2];
 
-  for (const section of sections) {
     // Extract date from the h3 content (e.g. "Wed, 11 Feb 2026 (showing ...)")
-    const dateMatch = section.match(/^\s*(\w+,\s+\d+\s+\w+\s+\d+)/);
+    const dateMatch = headerText.match(/(\w+,\s+\d+\s+\w+\s+\d+)/);
     if (!dateMatch) continue;
     const listingDate = new Date(dateMatch[1]).toISOString();
 
     // Split into individual entries by <dt>
-    const entries = section.split(/<dt>/);
+    const entries = blockHtml.split(/<dt>/);
 
     for (const entry of entries) {
       if (!entry.includes('<dd>')) continue;
@@ -385,7 +384,7 @@ function parseRecentListingsHtml(html: string): ArxivPaper[] {
         }
       }
 
-      // Extract abstract (not present on the /recent page, but check anyway)
+      // Extract abstract (not always present on the /recent page)
       const abstractMatch = entry.match(/<p class='mathjax'>\s*([\s\S]*?)\s*<\/p>/);
       const summary = abstractMatch
         ? decodeHtmlEntities(abstractMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
