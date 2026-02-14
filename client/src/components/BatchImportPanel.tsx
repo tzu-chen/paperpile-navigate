@@ -80,7 +80,7 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
       return;
     }
     setImportLoading(true);
-    setImportStatus(`Importing ${ids.length} papers and inferring citations...`);
+    setImportStatus(`Importing ${ids.length} papers...`);
     try {
       const options: Parameters<typeof api.batchImport>[1] = {};
 
@@ -98,7 +98,6 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
       const result = await api.batchImport(ids, options);
       const parts: string[] = [];
       parts.push(`${result.papers_added} papers added`);
-      parts.push(`${result.citations_created} citations inferred`);
       if (result.tags_applied > 0) parts.push(`${result.tags_applied} tag assignments`);
       if (result.errors.length > 0) parts.push(`${result.errors.length} errors`);
       setImportStatus(`Done: ${parts.join(', ')}`);
@@ -106,7 +105,7 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
       if (result.errors.length > 0) {
         showNotification(`Import finished with errors: ${result.errors.join('; ')}`);
       } else {
-        showNotification(`Imported ${result.papers_added} papers, ${result.citations_created} citations`);
+        showNotification(`Imported ${result.papers_added} papers`);
       }
       setImportArxivIds('');
       setSelectedWorldlineIds(new Set());
@@ -127,7 +126,7 @@ export default function BatchImportPanel({ tags, showNotification, onImportCompl
     <div className={`batch-import-section ${compact ? 'batch-import-compact' : ''}`}>
       {!compact && <h3>Batch Import</h3>}
       <p className="batch-import-hint">
-        Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library with citations inferred from Semantic Scholar.
+        Paste ArXiv IDs (one per line or comma-separated). Papers will be saved to the library.
       </p>
       <div className={`batch-import-body ${compact ? 'batch-import-body-vertical' : ''}`}>
         <div className="batch-import-left">

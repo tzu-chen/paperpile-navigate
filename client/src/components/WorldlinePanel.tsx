@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
 import Markdown from 'react-markdown';
-import { SavedPaper, Citation, Worldline, SemanticScholarPaper, SemanticScholarResult, ChatMessage, WorldlineChatSession } from '../types';
+import { SavedPaper, Worldline, ChatMessage, WorldlineChatSession } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 
@@ -20,16 +20,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [citations, setCitations] = useState<Citation[]>([]);
   const [worldlines, setWorldlines] = useState<WorldlineWithPapers[]>([]);
   const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
   const [hoveredPaperId, setHoveredPaperId] = useState<number | null>(null);
   const [activeWorldlineId, setActiveWorldlineId] = useState<number | null>(null);
-
-  // Refs for right-click drag citation
-  const dragSrcRef = useRef<number | null>(null);
-  const dragLineRef = useRef<SVGLineElement | null>(null);
-  const citationsRef = useRef<Citation[]>([]);
 
   // Ref for click/dblclick disambiguation (delay click so dblclick can cancel it)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,20 +37,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   // Sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Semantic Scholar citations discovery
-  const [discoveryResult, setDiscoveryResult] = useState<SemanticScholarResult | null>(null);
-  const [discoveryLoading, setDiscoveryLoading] = useState(false);
-  const [discoveryPaperId, setDiscoveryPaperId] = useState<number | null>(null);
-  const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
-  const [discoveryTab, setDiscoveryTab] = useState<'citations' | 'references'>('citations');
-  const [discoverySearch, setDiscoverySearch] = useState('');
-  const [discoveryPage, setDiscoveryPage] = useState(0);
-  const DISCOVERY_PAGE_SIZE = 10;
-
   // Visibility toggles (persisted to localStorage)
-  const [showCitations, setShowCitations] = useState<boolean>(() => {
-    try { const s = localStorage.getItem('paperpile-worldline-visibility'); if (s) { const v = JSON.parse(s); return v.showCitations ?? true; } } catch {} return true;
-  });
   const [showWorldlines, setShowWorldlines] = useState<boolean>(() => {
     try { const s = localStorage.getItem('paperpile-worldline-visibility'); if (s) { const v = JSON.parse(s); return v.showWorldlines ?? true; } } catch {} return true;
   });
@@ -66,8 +47,8 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
 
   // Persist visibility toggles
   useEffect(() => {
-    localStorage.setItem('paperpile-worldline-visibility', JSON.stringify({ showCitations, showWorldlines, showNonWorldlinePapers }));
-  }, [showCitations, showWorldlines, showNonWorldlinePapers]);
+    localStorage.setItem('paperpile-worldline-visibility', JSON.stringify({ showWorldlines, showNonWorldlinePapers }));
+  }, [showWorldlines, showNonWorldlinePapers]);
 
   // Worldline chat
   const [wlChatOpen, setWlChatOpen] = useState(false);
@@ -84,11 +65,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
 
   const loadData = useCallback(async () => {
     try {
-      const [cites, wls] = await Promise.all([
-        api.getCitations(),
-        api.getWorldlines(),
-      ]);
-      setCitations(cites);
+      const wls = await api.getWorldlines();
 
       // Load paper IDs for each worldline
       const wlsWithPapers: WorldlineWithPapers[] = await Promise.all(
@@ -106,11 +83,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Keep citationsRef in sync for D3 handlers
-  useEffect(() => {
-    citationsRef.current = citations;
-  }, [citations]);
 
   // Compute paper positions: x is spread by category, y is time
   const paperPositions = useMemo(() => {
@@ -268,9 +240,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
 
     svg.call(zoom);
 
-    // Prevent browser context menu on right-click (used for drag-citations)
-    svg.on('contextmenu', (event: Event) => event.preventDefault());
-
     // Click on empty space: clear selection and deactivate worldline
     svg.on('click', () => {
       setSelectedPaperIds(new Set());
@@ -353,64 +322,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         .attr('fill', 'var(--text-muted)')
         .attr('font-size', '10px')
         .text(cp.cat);
-    });
-
-    // Draw citation edges — conditionally visible
-    const citationLines = chartArea.append('g').attr('class', 'citation-lines');
-
-    if (showCitations) citations.forEach(c => {
-      const srcPos = paperPositions.get(c.citing_paper_id);
-      const tgtPos = paperPositions.get(c.cited_paper_id);
-      if (!srcPos || !tgtPos) return;
-
-      // Check if this edge belongs to any worldline
-      let edgeColor = 'var(--text-muted)';
-      let edgeWidth = 1.5;
-      let edgeOpacity = 0.5;
-
-      worldlines.forEach(wl => {
-        if (wl.paperIds.has(c.citing_paper_id) && wl.paperIds.has(c.cited_paper_id)) {
-          if (activeWorldlineId === wl.id) {
-            edgeColor = wl.color;
-            edgeWidth = 2.5;
-            edgeOpacity = 0.85;
-          }
-        }
-      });
-
-      const lineEl = citationLines.append('line')
-        .attr('x1', xScale(srcPos.x))
-        .attr('y1', yScale(srcPos.y))
-        .attr('x2', xScale(tgtPos.x))
-        .attr('y2', yScale(tgtPos.y))
-        .attr('stroke', edgeColor)
-        .attr('stroke-width', edgeWidth)
-        .attr('stroke-opacity', edgeOpacity)
-        .attr('data-citing', c.citing_paper_id)
-        .attr('data-cited', c.cited_paper_id);
-
-      // Arrow head pointing from citing to cited
-      const dx = xScale(tgtPos.x) - xScale(srcPos.x);
-      const dy = yScale(tgtPos.y) - yScale(srcPos.y);
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > 20) {
-        const ux = dx / len;
-        const uy = dy / len;
-        const arrowSize = 6;
-        const midX = xScale(srcPos.x) + dx * 0.6;
-        const midY = yScale(srcPos.y) + dy * 0.6;
-
-        citationLines.append('polygon')
-          .attr('points', [
-            [midX + ux * arrowSize, midY + uy * arrowSize],
-            [midX - uy * arrowSize * 0.5, midY + ux * arrowSize * 0.5],
-            [midX + uy * arrowSize * 0.5, midY - ux * arrowSize * 0.5],
-          ].map(p => p.join(',')).join(' '))
-          .attr('fill', edgeColor)
-          .attr('opacity', edgeOpacity)
-          .attr('data-citing', c.citing_paper_id)
-          .attr('data-cited', c.cited_paper_id);
-      }
     });
 
     // Draw worldline paths (connecting papers in a worldline in time order)
@@ -509,23 +420,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         const baseSW = +el.attr('data-base-sw');
         el.attr('r', baseR + 2).attr('stroke-width', baseSW + 1);
 
-        // Highlight connected citation edges
-        svg.selectAll('.citation-lines line').each(function () {
-          const line = d3.select(this);
-          if (+line.attr('data-citing') === p.id || +line.attr('data-cited') === p.id) {
-            line.attr('stroke', 'var(--accent-hover)')
-              .attr('stroke-width', 3)
-              .attr('stroke-opacity', 1);
-          }
-        });
-        svg.selectAll('.citation-lines polygon').each(function () {
-          const poly = d3.select(this);
-          if (+poly.attr('data-citing') === p.id || +poly.attr('data-cited') === p.id) {
-            poly.attr('fill', 'var(--accent-hover)')
-              .attr('opacity', 1);
-          }
-        });
-
         setHoveredPaperId(p.id);
         setTooltipPos({ x: event.clientX, y: event.clientY });
       });
@@ -538,39 +432,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         const el = d3.select(this);
         el.attr('r', el.attr('data-base-r'))
           .attr('stroke-width', el.attr('data-base-sw'));
-
-        // Restore citation edges to their base style
-        svg.selectAll('.citation-lines line').each(function () {
-          const line = d3.select(this);
-          const citing = +line.attr('data-citing');
-          const cited = +line.attr('data-cited');
-          let color = 'var(--text-muted)';
-          let w = 1.5;
-          let op = 0.5;
-          worldlines.forEach(wl => {
-            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
-              if (activeWorldlineId === wl.id) {
-                color = wl.color; w = 2.5; op = 0.85;
-              }
-            }
-          });
-          line.attr('stroke', color).attr('stroke-width', w).attr('stroke-opacity', op);
-        });
-        svg.selectAll('.citation-lines polygon').each(function () {
-          const poly = d3.select(this);
-          const citing = +poly.attr('data-citing');
-          const cited = +poly.attr('data-cited');
-          let color = 'var(--text-muted)';
-          let op = 0.5;
-          worldlines.forEach(wl => {
-            if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
-              if (activeWorldlineId === wl.id) {
-                color = wl.color; op = 0.85;
-              }
-            }
-          });
-          poly.attr('fill', color).attr('opacity', op);
-        });
 
         setHoveredPaperId(null);
         setTooltipPos(null);
@@ -602,107 +463,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         onOpenPaperRef.current(p);
       });
 
-      // Right-click drag: start
-      node.on('mousedown', function (event: MouseEvent) {
-        if (event.button === 2) {
-          event.preventDefault();
-          event.stopPropagation();
-          dragSrcRef.current = p.id;
-
-          // Highlight source node
-          const el = d3.select(this);
-          el.attr('stroke', 'var(--warning)')
-            .attr('stroke-width', 3)
-            .attr('r', +el.attr('data-base-r') + 3);
-
-          // Create drag line
-          const startX = xScale(pos.x);
-          const startY = yScale(pos.y);
-          const line = chartArea.append('line')
-            .attr('class', 'drag-citation-line')
-            .attr('x1', startX)
-            .attr('y1', startY)
-            .attr('x2', startX)
-            .attr('y2', startY)
-            .attr('stroke', 'var(--accent)')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '5,5')
-            .attr('pointer-events', 'none');
-          dragLineRef.current = line.node();
-        }
-      });
-
-      // Right-click drag: drop on target node
-      node.on('mouseup', async function (event: MouseEvent) {
-        if (event.button === 2 && dragSrcRef.current !== null && dragSrcRef.current !== p.id) {
-          event.preventDefault();
-          event.stopPropagation();
-
-          const srcId = dragSrcRef.current;
-          const tgtId = p.id;
-
-          // Clean up drag visual
-          if (dragLineRef.current) {
-            d3.select(dragLineRef.current).remove();
-            dragLineRef.current = null;
-          }
-          dragSrcRef.current = null;
-
-          // Check if citation exists (in either direction)
-          const existing = citationsRef.current.find(
-            c => (c.citing_paper_id === srcId && c.cited_paper_id === tgtId) ||
-                 (c.citing_paper_id === tgtId && c.cited_paper_id === srcId)
-          );
-
-          if (existing) {
-            try {
-              await api.removeCitation(existing.citing_paper_id, existing.cited_paper_id);
-              showNotification('Citation removed');
-              await loadData();
-            } catch (err: any) {
-              showNotification(err.message || 'Failed to remove citation');
-            }
-          } else {
-            try {
-              await api.addCitation(srcId, tgtId);
-              showNotification('Citation added');
-              await loadData();
-            } catch (err: any) {
-              showNotification(err.message || 'Failed to add citation');
-            }
-          }
-        }
-      });
-    });
-
-    // SVG-level mousemove for drag line tracking
-    svg.on('mousemove.citedrag', function (event: MouseEvent) {
-      if (dragSrcRef.current === null || !dragLineRef.current) return;
-
-      const svgNode = svg.node()!;
-      const point = svgNode.createSVGPoint();
-      point.x = event.clientX;
-      point.y = event.clientY;
-      const svgPoint = point.matrixTransform(svgNode.getScreenCTM()!.inverse());
-
-      const transform = d3.zoomTransform(svgNode);
-      const chartX = (svgPoint.x - margin.left - transform.x) / transform.k;
-      const chartY = (svgPoint.y - margin.top - transform.y) / transform.k;
-
-      d3.select(dragLineRef.current)
-        .attr('x2', chartX)
-        .attr('y2', chartY);
-    });
-
-    // SVG-level mouseup to cancel drag on empty space
-    svg.on('mouseup.citedrag', function (event: MouseEvent) {
-      if (event.button === 2 && dragSrcRef.current !== null) {
-        if (dragLineRef.current) {
-          d3.select(dragLineRef.current).remove();
-          dragLineRef.current = null;
-        }
-        dragSrcRef.current = null;
-      }
     });
 
     // Axis styling
@@ -722,7 +482,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, activeWorldlineId, showCitations, showWorldlines, showNonWorldlinePapers]);
+  }, [papers, paperPositions, worldlines, selectedPaperIds, activeWorldlineId, showWorldlines, showNonWorldlinePapers]);
 
   // Resize handler
   useEffect(() => {
@@ -819,65 +579,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       showNotification('Failed to delete paper');
     }
   };
-
-  // Discover citations from Semantic Scholar
-  const handleDiscoverCitations = async (paperId: number) => {
-    const paper = papers.find(p => p.id === paperId);
-    if (!paper) return;
-
-    setDiscoveryLoading(true);
-    setDiscoveryPaperId(paperId);
-    setDiscoveryResult(null);
-
-    try {
-      const result = await api.discoverCitations(paper.arxiv_id);
-      setDiscoveryResult(result);
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to discover citations');
-    } finally {
-      setDiscoveryLoading(false);
-    }
-  };
-
-  // Import a paper from Semantic Scholar results
-  const handleImportPaper = async (
-    s2Paper: SemanticScholarPaper,
-    direction: 'cites' | 'cited_by'
-  ) => {
-    const arxivId = s2Paper.externalIds?.ArXiv;
-    if (!arxivId || !discoveryPaperId) return;
-
-    setImportingIds(prev => new Set(prev).add(arxivId));
-    try {
-      await api.importCitedPaper(arxivId, discoveryPaperId, direction);
-      showNotification(`Added "${s2Paper.title.substring(0, 40)}..." to library with citation`);
-      await onRefresh();
-      await loadData();
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to import paper');
-    } finally {
-      setImportingIds(prev => {
-        const next = new Set(prev);
-        next.delete(arxivId);
-        return next;
-      });
-    }
-  };
-
-  // Clear discovery when selection changes
-  useEffect(() => {
-    if (selectedPaperIds.size !== 1) {
-      setDiscoveryResult(null);
-      setDiscoveryPaperId(null);
-    }
-  }, [selectedPaperIds]);
-
-  // Check if a Semantic Scholar paper is already in our library
-  const isInLibrary = useCallback((s2Paper: SemanticScholarPaper): boolean => {
-    const arxivId = s2Paper.externalIds?.ArXiv;
-    if (!arxivId) return false;
-    return papers.some(p => p.arxiv_id === arxivId);
-  }, [papers]);
 
   // Load worldline chat sessions when active worldline changes
   useEffect(() => {
@@ -1064,7 +765,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     return (
       <div className="worldline-panel">
         <div className="empty-state">
-          No papers in library. Save papers from the Browse tab to visualize citation worldlines.
+          No papers in library. Save papers from the Browse tab to visualize worldlines.
         </div>
       </div>
     );
@@ -1114,14 +815,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
             {/* Visibility toggles */}
             <div className="wl-section">
               <h4>Visibility</h4>
-              <label className="wl-toggle-row">
-                <input
-                  type="checkbox"
-                  checked={showCitations}
-                  onChange={() => setShowCitations(v => !v)}
-                />
-                <span>Citation Arrows</span>
-              </label>
               <label className="wl-toggle-row">
                 <input
                   type="checkbox"
@@ -1216,155 +909,6 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                   </div>
                 )}
               </div>
-
-            {/* Citations Discovery Panel */}
-            {selectedPaperIds.size === 1 && (() => {
-              const selectedId = Array.from(selectedPaperIds)[0];
-              const selectedPaper = papers.find(p => p.id === selectedId);
-              if (!selectedPaper) return null;
-
-              // Filter and paginate discovery results
-              const currentList = discoveryResult && discoveryPaperId === selectedId
-                ? (discoveryTab === 'citations' ? discoveryResult.citations : discoveryResult.references)
-                : [];
-              const searchLower = discoverySearch.toLowerCase();
-              const filtered = searchLower
-                ? currentList.filter(s2p =>
-                    s2p.title.toLowerCase().includes(searchLower) ||
-                    (s2p.authors || []).some(a => a.name.toLowerCase().includes(searchLower))
-                  )
-                : currentList;
-              const totalPages = Math.max(1, Math.ceil(filtered.length / DISCOVERY_PAGE_SIZE));
-              const safePage = Math.min(discoveryPage, totalPages - 1);
-              const pageItems = filtered.slice(safePage * DISCOVERY_PAGE_SIZE, (safePage + 1) * DISCOVERY_PAGE_SIZE);
-
-              return (
-                <div className="wl-section wl-discover-section">
-                  <div className="wl-section-header">
-                    <h4>Discover Citations</h4>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => handleDiscoverCitations(selectedId)}
-                      disabled={discoveryLoading}
-                    >
-                      {discoveryLoading ? 'Loading...' : discoveryPaperId === selectedId && discoveryResult ? 'Refresh' : 'Fetch'}
-                    </button>
-                  </div>
-                  <div className="wl-discover-paper-name" title={selectedPaper.title}>
-                    <LaTeX>{selectedPaper.title.length > 60 ? selectedPaper.title.substring(0, 57) + '...' : selectedPaper.title}</LaTeX>
-                  </div>
-
-                  {discoveryLoading && (
-                    <div className="wl-discover-loading">Querying Semantic Scholar...</div>
-                  )}
-
-                  {discoveryResult && discoveryPaperId === selectedId && (
-                    <>
-                      <div className="wl-discover-tabs">
-                        <button
-                          className={`btn btn-sm ${discoveryTab === 'citations' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => { setDiscoveryTab('citations'); setDiscoveryPage(0); }}
-                        >
-                          Cited by ({discoveryResult.citations.length})
-                        </button>
-                        <button
-                          className={`btn btn-sm ${discoveryTab === 'references' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => { setDiscoveryTab('references'); setDiscoveryPage(0); }}
-                        >
-                          References ({discoveryResult.references.length})
-                        </button>
-                      </div>
-
-                      <input
-                        type="text"
-                        className="wl-discover-search"
-                        placeholder="Filter by title or author..."
-                        value={discoverySearch}
-                        onChange={e => { setDiscoverySearch(e.target.value); setDiscoveryPage(0); }}
-                      />
-
-                      <div className="wl-discover-list">
-                        {pageItems.map((s2p, idx) => {
-                          const arxivId = s2p.externalIds?.ArXiv;
-                          const inLib = isInLibrary(s2p);
-                          const importing = arxivId ? importingIds.has(arxivId) : false;
-                          const authorStr = s2p.authors?.slice(0, 2).map(a => a.name).join(', ') || 'Unknown';
-                          const direction = discoveryTab === 'citations' ? 'cited_by' as const : 'cites' as const;
-                          const viewUrl = arxivId
-                            ? `https://arxiv.org/abs/${arxivId}`
-                            : s2p.url || `https://www.semanticscholar.org/paper/${s2p.paperId}`;
-
-                          return (
-                            <div key={s2p.paperId || idx} className="wl-discover-item">
-                              <div className="wl-discover-item-info">
-                                <span className="wl-discover-item-title" title={s2p.title}>
-                                  {s2p.title.length > 50 ? s2p.title.substring(0, 47) + '...' : s2p.title}
-                                </span>
-                                <span className="wl-discover-item-meta">
-                                  {authorStr}{s2p.year ? ` (${s2p.year})` : ''}
-                                  {arxivId ? ' · arXiv' : ''}
-                                </span>
-                              </div>
-                              <div className="wl-discover-item-actions">
-                                <a
-                                  className="btn btn-sm btn-secondary wl-discover-view-btn"
-                                  href={viewUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="View paper"
-                                >
-                                  View
-                                </a>
-                                {arxivId && !inLib && (
-                                  <button
-                                    className="btn btn-sm btn-success wl-discover-import-btn"
-                                    onClick={() => handleImportPaper(s2p, direction)}
-                                    disabled={importing}
-                                    title="Add to library with citation link"
-                                  >
-                                    {importing ? '...' : '+'}
-                                  </button>
-                                )}
-                                {inLib && (
-                                  <span className="wl-discover-in-lib" title="Already in library">&#10003;</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {filtered.length === 0 && (
-                          <p className="muted">
-                            {discoverySearch ? 'No matches.' : `No ${discoveryTab} found.`}
-                          </p>
-                        )}
-                      </div>
-
-                      {totalPages > 1 && (
-                        <div className="wl-discover-pager">
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            disabled={safePage === 0}
-                            onClick={() => setDiscoveryPage(safePage - 1)}
-                          >
-                            Prev
-                          </button>
-                          <span className="wl-discover-pager-info">
-                            {safePage + 1} / {totalPages}
-                          </span>
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            disabled={safePage >= totalPages - 1}
-                            onClick={() => setDiscoveryPage(safePage + 1)}
-                          >
-                            Next
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })()}
 
             {/* Worldlines list */}
             <div className="wl-section">

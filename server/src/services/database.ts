@@ -63,16 +63,6 @@ export function initializeDatabase(): void {
       added_at TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS paper_citations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      citing_paper_id INTEGER NOT NULL,
-      cited_paper_id INTEGER NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(citing_paper_id, cited_paper_id),
-      FOREIGN KEY (citing_paper_id) REFERENCES papers(id) ON DELETE CASCADE,
-      FOREIGN KEY (cited_paper_id) REFERENCES papers(id) ON DELETE CASCADE
-    );
-
     CREATE TABLE IF NOT EXISTS worldlines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -93,8 +83,6 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_comments_paper_id ON comments(paper_id);
     CREATE INDEX IF NOT EXISTS idx_paper_tags_paper_id ON paper_tags(paper_id);
     CREATE INDEX IF NOT EXISTS idx_paper_tags_tag_id ON paper_tags(tag_id);
-    CREATE INDEX IF NOT EXISTS idx_citations_citing ON paper_citations(citing_paper_id);
-    CREATE INDEX IF NOT EXISTS idx_citations_cited ON paper_citations(cited_paper_id);
     CREATE INDEX IF NOT EXISTS idx_worldline_papers_worldline ON worldline_papers(worldline_id);
     CREATE INDEX IF NOT EXISTS idx_worldline_papers_paper ON worldline_papers(paper_id);
   `);
@@ -240,35 +228,6 @@ export function removeFavoriteAuthor(id: number) {
 
 export function getFavoriteAuthorByName(name: string) {
   return db.prepare('SELECT * FROM favorite_authors WHERE name = ?').get(name);
-}
-
-// Citation operations
-export function addCitation(citingPaperId: number, citedPaperId: number) {
-  return db.prepare(
-    'INSERT OR IGNORE INTO paper_citations (citing_paper_id, cited_paper_id) VALUES (?, ?)'
-  ).run(citingPaperId, citedPaperId);
-}
-
-export function removeCitation(citingPaperId: number, citedPaperId: number) {
-  return db.prepare(
-    'DELETE FROM paper_citations WHERE citing_paper_id = ? AND cited_paper_id = ?'
-  ).run(citingPaperId, citedPaperId);
-}
-
-export function getCitations() {
-  return db.prepare(`
-    SELECT pc.id, pc.citing_paper_id, pc.cited_paper_id, pc.created_at
-    FROM paper_citations pc
-    ORDER BY pc.created_at DESC
-  `).all();
-}
-
-export function getCitationsForPaper(paperId: number) {
-  return db.prepare(`
-    SELECT pc.id, pc.citing_paper_id, pc.cited_paper_id
-    FROM paper_citations pc
-    WHERE pc.citing_paper_id = ? OR pc.cited_paper_id = ?
-  `).all(paperId, paperId);
 }
 
 // Worldline operations
