@@ -7,48 +7,140 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run install:all       # Install dependencies for root, server/, and client/
 npm run dev               # Start both frontend (Vite) and backend (Express) concurrently
-npm run dev:server        # Backend only (Express on port 3001)
+npm run dev:server        # Backend only (Express on port 3001, uses tsx watch for hot reload)
 npm run dev:client        # Frontend only (Vite on port 5173)
 npm run build             # Build both client and server for production
-npm start                 # Start production server (serves API + built frontend)
+npm run build:client      # Build frontend only (tsc && vite build)
+npm run build:server      # Build backend only (tsc)
+npm start                 # Start production server (serves API + built frontend from client/dist/)
 ```
 
-The Vite dev server proxies `/api` requests to `http://localhost:3001`.
+The Vite dev server proxies `/api` requests to `http://localhost:3001`. No `.env` files are used — the only server environment variable is `PORT` (defaults to 3001). The Claude API key is stored client-side in localStorage.
 
 ## Architecture Overview
 
-Full-stack TypeScript app: React 18 + Vite frontend, Express + SQLite backend. Manages academic papers from ArXiv with AI analysis via Claude API.
+Full-stack TypeScript app: React 18 + Vite frontend, Express + SQLite backend. Manages academic papers from ArXiv with AI-powered analysis via Claude API.
+
+```
+paperpile-navigate/
+├── package.json          # Root scripts (concurrently for dev, install:all)
+├── client/               # React frontend (Vite)
+│   ├── src/
+│   │   ├── main.tsx              # Entry point (React StrictMode + MathJax context)
+│   │   ├── App.tsx               # Root component, 6 view modes, global state
+│   │   ├── types.ts              # Shared interfaces + ARXIV_CATEGORY_GROUPS
+│   │   ├── colorSchemes.ts       # 8 theme definitions with CSS custom properties
+│   │   ├── styles/main.css       # Global styles, CSS variables, layout
+│   │   ├── components/           # 17 React components
+│   │   └── services/api.ts       # Centralized HTTP client + localStorage helpers
+│   └── vite.config.ts            # Vite config with /api proxy to port 3001
+└── server/               # Express backend
+    ├── src/
+    │   ├── index.ts              # Express entry point, mounts 7 route modules
+    │   ├── types.ts              # Mirrors client types + category constants
+    │   ├── routes/               # 7 RESTful route handlers
+    │   └── services/             # Business logic (DB, ArXiv API, PDF, export, similarity)
+    └── data/                     # Runtime data (gitignored)
+        ├── papers.db             # SQLite database
+        └── pdfs/                 # Downloaded PDF files
+```
 
 ### Client (`client/src/`)
 
-- **App.tsx** — Root component managing 6 view modes: `browse`, `library`, `authors`, `viewer`, `chatHistory`, `worldline`. Holds global state for papers, tags, and favorite authors.
-- **components/** — 14 components. `PaperViewer` is the main reading interface with a tabbed sidebar (chat, comments, tags, export, info) and `PDFViewer` on the left.
-- **services/api.ts** — Centralized API client. All backend calls go through a `request<T>()` helper. Chat history and app settings (API key, theme) are stored in `localStorage`, not on the server.
-- **types.ts** — Shared TypeScript interfaces (`ArxivPaper`, `SavedPaper`, `ChatSession`, `Tag`, `Worldline`, etc.). Note: `authors` and `categories` are JSON strings in `SavedPaper`.
-- **colorSchemes.ts** — 8 theme definitions applied via CSS custom properties.
+- **App.tsx** — Root component managing 6 view modes: `browse`, `library`, `authors`, `viewer`, `chatHistory`, `worldline`. Holds global state for papers, tags, and favorite authors. Initializes color scheme and font size from localStorage on mount.
+- **components/** — 17 components:
+  - `PaperBrowser` — Search/browse with category filters, query, pagination
+  - `Library` — Saved papers list with status/tag filters, multi-select bulk operations
+  - `PaperViewer` — Main reader: PDFViewer on left, tabbed sidebar (chat, comments, tags, export, info, worldline, import) on right. Supports immersive mode and browse-context navigation.
+  - `PDFViewer` — react-pdf integration with page controls, search, annotations
+  - `ChatPanel` — Conversation UI with markdown rendering and token usage display
+  - `ChatHistory` — Lists all chat sessions per paper
+  - `CommentPanel` — Per-page annotations with edit/delete
+  - `TagPanel` — Add/remove tags on current paper
+  - `ExportPanel` — BibTeX and Paperpile JSON export
+  - `WorldlinePanel` — Worldline CRUD with D3 network visualization
+  - `WorldlineSidebarPanel` — Paper list within a worldline with drag-drop reordering
+  - `WorldlineInfoPanel` — Info panel for worldline viewer
+  - `FavoriteAuthors` — Author management and publications feed
+  - `SettingsModal` — API key, theme, similarity threshold, font size
+  - `BatchImportPanel` — Bulk paper import with worldline/tag assignment
+  - `ArxivRefreshTimer` — Countdown to next ArXiv announcement
+  - `LaTeX` — MathJax wrapper component
+- **services/api.ts** — Centralized API client (~548 lines). All backend calls go through a `request<T>()` helper with automatic JSON serialization. Chat history and app settings stored in localStorage via dedicated helper functions.
+- **types.ts** — Shared TypeScript interfaces (`ArxivPaper`, `SavedPaper`, `ChatSession`, `Tag`, `Worldline`, etc.). Note: `authors` and `categories` are JSON strings in `SavedPaper` (parsed in routes). Defines `ARXIV_CATEGORY_GROUPS` constant with 14 groups and 140+ subcategories.
+- **colorSchemes.ts** — 8 theme definitions (default-dark, solarized-dark/light, nord-dark/light, dracula-dark/light, one-dark-pro) applied via CSS custom properties.
 
 ### Server (`server/src/`)
 
-- **index.ts** — Express entry point. Mounts 7 route modules under `/api`, serves static client build in production with SPA fallback.
+- **index.ts** — Express entry point. CORS enabled, JSON body parser (10MB limit). Mounts 7 route modules under `/api`. Serves static client build from `client/dist/` in production with SPA fallback. Initializes database and PDF storage on startup.
 - **routes/** — RESTful route handlers:
-  - `arxiv.ts` — Search/categories/PDF proxy (avoids CORS)
-  - `papers.ts` — CRUD for saved papers + sub-routes for comments and tags
-  - `tags.ts` — Tag management
-  - `chat.ts` — Claude AI proxy. Fetches PDF from ArXiv (cached 30min in memory), sends to Anthropic API with paper context. Model: `claude-sonnet-4-20250514`, max tokens: 2048, uses prompt caching.
-  - `authors.ts` — Favorite authors + batch-fetches their recent publications (3 concurrent)
-  - `export.ts` — BibTeX and Paperpile JSON generation. Citation key format: `{LastName}{Year}{ArxivId}`
-  - `worldlines.ts` — Citation network management (papers, citations, worldline groups)
+  - `arxiv.ts` — Search, categories, latest/recent papers, single paper fetch, PDF proxy (avoids CORS)
+  - `papers.ts` — Full CRUD for saved papers + bulk operations (download-pdfs, delete-pdfs, delete, status, add-tag, remove-tag) + sub-routes for comments and tags
+  - `tags.ts` — Tag CRUD (name is UNIQUE)
+  - `chat.ts` — Claude AI proxy. Fetches PDF (cached 30min in memory), sends to Anthropic API with paper context and related worldline papers. Model: `claude-sonnet-4-20250514`, max_tokens: 2048. Also handles worldline-level chat (no PDF, titles + abstracts only) and API key verification.
+  - `authors.ts` — Favorite authors + batch-fetches recent publications (concurrency limit: 3)
+  - `export.ts` — BibTeX and Paperpile JSON generation. Citation key format: `{LastName}{Year}{ArxivId}`. Embeds tags as keywords and comments as notes.
+  - `worldlines.ts` — Worldline CRUD, paper assignment with position ordering, TF-IDF similarity scoring, batch import from ArXiv
 - **services/** — Business logic layer:
-  - `database.ts` — SQLite with WAL mode, foreign keys enabled. All queries use parameterized statements. Schema has 8 tables with cascade deletion from papers.
-  - `arxiv.ts` — ArXiv REST API client (`http://export.arxiv.org/api/query`), XML parsing via xml2js.
-  - `chat.ts` — Anthropic API integration with PDF base64 encoding and ephemeral prompt caching.
-  - `paperpile.ts` — BibTeX/Paperpile export formatting, embeds tags as keywords and comments as notes.
+  - `database.ts` — SQLite with better-sqlite3. WAL mode, foreign keys enabled. 40+ query functions, all parameterized. Schema created/migrated in `initializeDatabase()`.
+  - `arxiv.ts` — ArXiv REST API client (`http://export.arxiv.org/api/query`). XML parsing via xml2js. Functions for search, author search, single paper fetch, latest (RSS), and recent (HTML scraping).
+  - `chat.ts` — Anthropic API integration with PDF base64 encoding and ephemeral prompt caching (`cache_control: { type: 'ephemeral' }`).
+  - `pdf.ts` — PDF storage management under `server/data/pdfs/`. Download, store, delete, path resolution. ArXiv IDs escaped (`/` → `_`) for filenames.
+  - `similarity.ts` — Custom TF-IDF cosine similarity implementation. Tokenize → remove stop words → compute TF-IDF → cosine similarity. Title weighted 2x.
+  - `paperpile.ts` — BibTeX/Paperpile export formatting with author name parsing.
 
-### Database (`server/data/papers.db`)
+### Database Schema (`server/data/papers.db`)
 
-SQLite database created at runtime. Key tables: `papers` (unique on `arxiv_id`), `comments` (per-page annotations), `tags`/`paper_tags`, `favorite_authors`, `paper_citations`, `worldlines`/`worldline_papers`. Status values: `new`, `reading`, `reviewed`, `exported`.
+SQLite database created at runtime. 7 tables with cascade deletion:
+
+| Table | Key Columns | Constraints |
+|-------|-------------|-------------|
+| `papers` | id, arxiv_id, title, summary, authors, published, status, pdf_path | arxiv_id UNIQUE, status CHECK ('new','reading','reviewed','exported') |
+| `comments` | id, paper_id, content, page_number | FK→papers CASCADE |
+| `tags` | id, name, color | name UNIQUE, color DEFAULT '#6366f1' |
+| `paper_tags` | paper_id, tag_id | Composite PK, both FK CASCADE |
+| `favorite_authors` | id, name, added_at | name UNIQUE |
+| `worldlines` | id, name, color, created_at | — |
+| `worldline_papers` | worldline_id, paper_id, position | Composite PK, both FK CASCADE |
+
+Indices on: `papers.arxiv_id`, `comments.paper_id`, `paper_tags.paper_id`, `paper_tags.tag_id`, `worldline_papers.worldline_id`, `worldline_papers.paper_id`.
 
 ### Storage Split
 
-- **Server-side (SQLite)**: Papers, comments, tags, authors, citations, worldlines
-- **Client-side (localStorage)**: Claude API key, theme preference, chat session history
+- **Server-side (SQLite)**: Papers, comments, tags, authors, worldlines
+- **Client-side (localStorage)**: Claude API key (`paperpile-navigate-settings`), theme preference, chat history (`paperpile-navigate-chat-history`), worldline chat history (`paperpile-navigate-worldline-chat-history`)
+
+## Key Dependencies
+
+**Frontend:** React 18.3, Vite 6, TypeScript 5.7, react-pdf 9.1, react-markdown 10.1, better-react-mathjax 2.4, d3 7.9
+
+**Backend:** Express 4.21, TypeScript 5.7, better-sqlite3 11.7, xml2js 0.6, cors 2.8, tsx 4.19 (dev)
+
+## Conventions
+
+### Code Style
+- **TypeScript strict mode** enabled in both client and server tsconfig
+- **Naming**: camelCase for variables/functions, PascalCase for components/interfaces/types, snake_case for database columns and table names, UPPER_CASE for constants
+- **Imports**: Named imports from libraries, `* as api` / `* as db` for service modules, relative paths for local files
+- **No linter or formatter config** — follow existing code style in each file
+
+### API Patterns
+- All routes under `/api` prefix, RESTful verbs (GET/POST/PUT/PATCH/DELETE)
+- Parameterized SQL queries exclusively — no string interpolation in queries
+- HTTP status codes: 201 (created), 400 (bad input), 404 (not found), 409 (conflict/duplicate), 500 (server error)
+- Error responses: `{ error: 'descriptive message' }`
+- Route-level try-catch wrapping all handlers
+
+### React Patterns
+- Functional components with hooks (useState, useEffect, useCallback, useRef)
+- Props drilling from App.tsx (no context/store library)
+- `showNotification(message)` callback for user-facing errors
+- Async operations in useEffect or event handlers with try-catch
+
+### Data Serialization
+- `authors` and `categories` fields are JSON strings in the database and `SavedPaper` type
+- Parsed to arrays in route handlers when needed
+- Always use `JSON.parse()` / `JSON.stringify()` when reading/writing these fields
+
+### Testing
+No test framework is currently configured. Validate changes by running `npm run build` (runs `tsc` for both client and server, catching type errors).
