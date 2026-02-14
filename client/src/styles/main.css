@@ -1137,6 +1137,17 @@ input[type="color"] {
   display: block;
 }
 
+/* Keep PDF text layer transparent during selection so the canvas font shows through */
+.pdf-page-wrapper .react-pdf__Page__textContent span::selection {
+  background-color: rgba(0, 0, 255, 0.25);
+  color: transparent;
+}
+
+.pdf-page-wrapper .react-pdf__Page__textContent span::-moz-selection {
+  background-color: rgba(0, 0, 255, 0.25);
+  color: transparent;
+}
+
 /* PDF Dark Theme — inverts PDF content for night reading */
 .pdf-dark-theme .pdf-pages-container {
   background: #2a2a2a;
