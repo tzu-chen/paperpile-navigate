@@ -1,4 +1,4 @@
-import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, WorldlineChatSession, Citation, Worldline, SemanticScholarResult, PaperSimilarityResult } from '../types';
+import { ArxivPaper, SavedPaper, Comment, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, WorldlineChatSession, Worldline, PaperSimilarityResult } from '../types';
 
 const BASE = '/api';
 
@@ -369,25 +369,6 @@ export function deleteWorldlineChatSession(sessionId: string): void {
   persistAllWorldlineSessions(sessions);
 }
 
-// Citations
-export async function getCitations(): Promise<Citation[]> {
-  return request('/worldlines/citations');
-}
-
-export async function addCitation(citingPaperId: number, citedPaperId: number): Promise<void> {
-  await request('/worldlines/citations', {
-    method: 'POST',
-    body: JSON.stringify({ citing_paper_id: citingPaperId, cited_paper_id: citedPaperId }),
-  });
-}
-
-export async function removeCitation(citingPaperId: number, citedPaperId: number): Promise<void> {
-  await request('/worldlines/citations', {
-    method: 'DELETE',
-    body: JSON.stringify({ citing_paper_id: citingPaperId, cited_paper_id: citedPaperId }),
-  });
-}
-
 // Worldlines
 export async function getWorldlines(): Promise<Worldline[]> {
   return request('/worldlines');
@@ -437,7 +418,6 @@ export async function batchImport(
 ): Promise<{
   success: boolean;
   papers_added: number;
-  citations_created: number;
   worldline_ids: number[];
   tags_applied: number;
   errors: string[];
@@ -455,22 +435,6 @@ export async function batchImport(
   return request('/worldlines/batch-import', {
     method: 'POST',
     body: JSON.stringify(body),
-  });
-}
-
-// Semantic Scholar Discovery
-export async function discoverCitations(arxivId: string): Promise<SemanticScholarResult> {
-  return request(`/worldlines/citations/discover/${encodeURIComponent(arxivId)}`);
-}
-
-export async function importCitedPaper(
-  arxivId: string,
-  sourcePaperId: number,
-  direction: 'cites' | 'cited_by'
-): Promise<{ paper: SavedPaper; success: boolean }> {
-  return request('/worldlines/citations/import', {
-    method: 'POST',
-    body: JSON.stringify({ arxiv_id: arxivId, source_paper_id: sourcePaperId, direction }),
   });
 }
 

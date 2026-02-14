@@ -46,99 +46,7 @@ router.post('/similarity', (req: Request, res: Response) => {
   }
 });
 
-// --- Semantic Scholar ---
-
-const S2_API_BASE = 'https://api.semanticscholar.org/graph/v1/paper';
-const S2_FIELDS = 'title,authors,year,externalIds,url,abstract';
-
-// GET /api/worldlines/citations/discover/:arxivId — fetch citing & referenced papers from Semantic Scholar
-router.get('/citations/discover/:arxivId', async (req: Request, res: Response) => {
-  try {
-    const { arxivId } = req.params;
-    const paperId = `ARXIV:${arxivId}`;
-
-    const [citationsRes, referencesRes] = await Promise.all([
-      fetch(`${S2_API_BASE}/${paperId}/citations?fields=${S2_FIELDS}&limit=50`),
-      fetch(`${S2_API_BASE}/${paperId}/references?fields=${S2_FIELDS}&limit=50`),
-    ]);
-
-    if (!citationsRes.ok && !referencesRes.ok) {
-      return res.status(502).json({ error: 'Semantic Scholar API unavailable' });
-    }
-
-    const citationsData: any = citationsRes.ok ? await citationsRes.json() : { data: [] };
-    const referencesData: any = referencesRes.ok ? await referencesRes.json() : { data: [] };
-
-    // Normalize the data: citations returns {citingPaper}, references returns {citedPaper}
-    const citations = (citationsData.data || [])
-      .map((item: any) => item.citingPaper)
-      .filter((p: any) => p && p.title);
-
-    const references = (referencesData.data || [])
-      .map((item: any) => item.citedPaper)
-      .filter((p: any) => p && p.title);
-
-    res.json({ citations, references });
-  } catch (error) {
-    console.error('Semantic Scholar fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch from Semantic Scholar' });
-  }
-});
-
-// POST /api/worldlines/citations/import — save a paper by arxiv ID and create citation link
-router.post('/citations/import', async (req: Request, res: Response) => {
-  try {
-    const { arxiv_id, source_paper_id, direction } = req.body;
-    // direction: 'cites' means source paper cites the imported paper
-    //            'cited_by' means imported paper cites the source paper
-
-    if (!arxiv_id || !source_paper_id || !direction) {
-      return res.status(400).json({ error: 'arxiv_id, source_paper_id, and direction are required' });
-    }
-
-    // Check if paper already exists in library
-    let paper = db.getPaperByArxivId(arxiv_id) as any;
-
-    if (!paper) {
-      // Fetch paper details from ArXiv
-      const arxivPaper = await getArxivPaper(arxiv_id);
-      if (!arxivPaper) {
-        return res.status(404).json({ error: 'Paper not found on ArXiv' });
-      }
-
-      const result = db.savePaper({
-        arxiv_id: arxivPaper.id,
-        title: arxivPaper.title,
-        summary: arxivPaper.summary,
-        authors: JSON.stringify(arxivPaper.authors),
-        published: arxivPaper.published,
-        updated: arxivPaper.updated,
-        categories: JSON.stringify(arxivPaper.categories),
-        pdf_url: arxivPaper.pdfUrl,
-        abs_url: arxivPaper.absUrl,
-        doi: arxivPaper.doi,
-        journal_ref: arxivPaper.journalRef,
-      });
-      paper = db.getPaper(result.lastInsertRowid as number);
-    }
-
-    // Create citation link
-    if (direction === 'cites') {
-      // source paper cites the imported paper
-      db.addCitation(source_paper_id, paper.id);
-    } else {
-      // imported paper cites the source paper (imported paper is the citing paper)
-      db.addCitation(paper.id, source_paper_id);
-    }
-
-    res.status(201).json({ paper, success: true });
-  } catch (error) {
-    console.error('Import citation error:', error);
-    res.status(500).json({ error: 'Failed to import paper and create citation' });
-  }
-});
-
-// POST /api/worldlines/batch-import — batch import papers, optionally infer citations, assign to worldline and/or tags
+// POST /api/worldlines/batch-import — batch import papers, assign to worldline and/or tags
 router.post('/batch-import', async (req: Request, res: Response) => {
   try {
     const { arxiv_ids, worldline_name, worldline_color, worldline_id, worldline_ids, new_worldlines, tag_ids } = req.body;
@@ -192,60 +100,7 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       savedPapers.push(paper);
     }
 
-    // Step 2: Infer citations via Semantic Scholar
-    let citationsCreated = 0;
-    const batchArxivIds = new Set(paperMap.keys());
-
-    // Helper: strip version suffix from ArXiv IDs (e.g. "2301.00001v2" -> "2301.00001")
-    const stripVersion = (id: string) => id.replace(/v\d+$/, '');
-
-    // Helper: fetch with retry on 429 rate-limit responses
-    const fetchWithRetry = async (url: string, retries = 3): Promise<globalThis.Response> => {
-      const res = await fetch(url);
-      if (res.status === 429 && retries > 0) {
-        const retryAfter = parseInt(res.headers.get('retry-after') || '2', 10);
-        await new Promise(r => setTimeout(r, retryAfter * 1000));
-        return fetchWithRetry(url, retries - 1);
-      }
-      return res;
-    };
-
-    const batchIds = [...batchArxivIds];
-    for (let idx = 0; idx < batchIds.length; idx++) {
-      const arxivId = batchIds[idx];
-      const paperId = paperMap.get(arxivId)!;
-      try {
-        // Rate-limit: wait 1s between Semantic Scholar requests (free tier ≈ 1 req/s)
-        if (idx > 0) {
-          await new Promise(r => setTimeout(r, 1000));
-        }
-
-        const s2Res = await fetchWithRetry(
-          `${S2_API_BASE}/ARXIV:${arxivId}/references?fields=externalIds&limit=500`
-        );
-        if (!s2Res.ok) continue;
-        const s2Data: any = await s2Res.json();
-        const refs = s2Data.data || [];
-
-        for (const ref of refs) {
-          const rawRefArxivId = ref.citedPaper?.externalIds?.ArXiv;
-          if (!rawRefArxivId) continue;
-          // Normalize: strip version suffix so it matches our cleaned batch set
-          const refArxivId = stripVersion(rawRefArxivId);
-          if (batchArxivIds.has(refArxivId) && refArxivId !== arxivId) {
-            const citedPaperId = paperMap.get(refArxivId)!;
-            const result = db.addCitation(paperId, citedPaperId);
-            if (result.changes > 0) {
-              citationsCreated++;
-            }
-          }
-        }
-      } catch {
-        // Semantic Scholar request failed for this paper — continue with others
-      }
-    }
-
-    // Step 3: Optionally create/assign worldlines (supports multiple)
+    // Step 2: Optionally create/assign worldlines (supports multiple)
     const targetWorldlineIds: number[] = [];
 
     // Multiple existing worldline IDs
@@ -288,7 +143,7 @@ router.post('/batch-import', async (req: Request, res: Response) => {
       }
     }
 
-    // Step 4: Optionally apply tags to all imported papers
+    // Step 3: Optionally apply tags to all imported papers
     let tagsApplied = 0;
     if (tag_ids && Array.isArray(tag_ids) && tag_ids.length > 0) {
       for (const paper of savedPapers) {
@@ -306,7 +161,6 @@ router.post('/batch-import', async (req: Request, res: Response) => {
     res.status(201).json({
       success: true,
       papers_added: savedPapers.length,
-      citations_created: citationsCreated,
       worldline_ids: targetWorldlineIds,
       tags_applied: tagsApplied,
       errors,
@@ -328,52 +182,6 @@ router.get('/related-papers/:arxivId', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get related papers error:', error);
     res.status(500).json({ error: 'Failed to get related papers' });
-  }
-});
-
-// --- Citations ---
-
-// GET /api/worldlines/citations - Get all citations
-router.get('/citations', (_req: Request, res: Response) => {
-  try {
-    const citations = db.getCitations();
-    res.json(citations);
-  } catch (error) {
-    console.error('Get citations error:', error);
-    res.status(500).json({ error: 'Failed to get citations' });
-  }
-});
-
-// POST /api/worldlines/citations - Add a citation
-router.post('/citations', (req: Request, res: Response) => {
-  try {
-    const { citing_paper_id, cited_paper_id } = req.body;
-    if (!citing_paper_id || !cited_paper_id) {
-      return res.status(400).json({ error: 'citing_paper_id and cited_paper_id are required' });
-    }
-    if (citing_paper_id === cited_paper_id) {
-      return res.status(400).json({ error: 'A paper cannot cite itself' });
-    }
-    db.addCitation(citing_paper_id, cited_paper_id);
-    res.status(201).json({ success: true });
-  } catch (error) {
-    console.error('Add citation error:', error);
-    res.status(500).json({ error: 'Failed to add citation' });
-  }
-});
-
-// DELETE /api/worldlines/citations - Remove a citation
-router.delete('/citations', (req: Request, res: Response) => {
-  try {
-    const { citing_paper_id, cited_paper_id } = req.body;
-    if (!citing_paper_id || !cited_paper_id) {
-      return res.status(400).json({ error: 'citing_paper_id and cited_paper_id are required' });
-    }
-    db.removeCitation(citing_paper_id, cited_paper_id);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Remove citation error:', error);
-    res.status(500).json({ error: 'Failed to remove citation' });
   }
 });
 

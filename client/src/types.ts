@@ -82,33 +82,11 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-export interface Citation {
-  id: number;
-  citing_paper_id: number;
-  cited_paper_id: number;
-  created_at?: string;
-}
-
 export interface Worldline {
   id: number;
   name: string;
   color: string;
   created_at: string;
-}
-
-export interface SemanticScholarPaper {
-  paperId: string;
-  title: string;
-  abstract?: string;
-  year?: number;
-  authors?: { authorId: string; name: string }[];
-  externalIds?: { ArXiv?: string; DOI?: string; [key: string]: string | undefined };
-  url?: string;
-}
-
-export interface SemanticScholarResult {
-  citations: SemanticScholarPaper[];
-  references: SemanticScholarPaper[];
 }
 
 export interface WorldlineSimilarityMatch {
