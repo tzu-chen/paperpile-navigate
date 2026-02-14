@@ -271,6 +271,12 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
     // Prevent browser context menu on right-click (used for drag-citations)
     svg.on('contextmenu', (event: Event) => event.preventDefault());
 
+    // Click on empty space: clear selection and deactivate worldline
+    svg.on('click', () => {
+      setSelectedPaperIds(new Set());
+      setActiveWorldlineId(null);
+    });
+
     // Axes
     const yAxisG = g.append('g')
       .call(d3.axisLeft(yScale).ticks(8))
@@ -364,9 +370,11 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
 
       worldlines.forEach(wl => {
         if (wl.paperIds.has(c.citing_paper_id) && wl.paperIds.has(c.cited_paper_id)) {
-          edgeColor = wl.color;
-          edgeWidth = 2.5;
-          edgeOpacity = 0.85;
+          if (activeWorldlineId === wl.id) {
+            edgeColor = wl.color;
+            edgeWidth = 2.5;
+            edgeOpacity = 0.85;
+          }
         }
       });
 
@@ -419,13 +427,17 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         .y(d => yScale(d.pos.y))
         .curve(d3.curveCatmullRom.alpha(0.5));
 
+      const isActiveWl = activeWorldlineId === wl.id;
+      const pathColor = isActiveWl ? wl.color : 'var(--text-muted)';
+      const pathOpacity = isActiveWl ? 0.3 : 0.1;
+
       chartArea.append('path')
         .datum(wlPaperPositions)
         .attr('d', lineGen)
         .attr('fill', 'none')
-        .attr('stroke', wl.color)
+        .attr('stroke', pathColor)
         .attr('stroke-width', 3)
-        .attr('stroke-opacity', 0.3)
+        .attr('stroke-opacity', pathOpacity)
         .attr('stroke-linecap', 'round');
     });
 
@@ -454,8 +466,17 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       if (!showNonWorldlinePapers && belongsToWorldlines.length === 0) return;
 
       if (belongsToWorldlines.length > 0) {
-        fillColor = belongsToWorldlines[0].color;
-        strokeColor = belongsToWorldlines[0].color;
+        const activeWl = activeWorldlineId !== null
+          ? belongsToWorldlines.find(wl => wl.id === activeWorldlineId)
+          : null;
+
+        if (activeWl) {
+          fillColor = activeWl.color;
+          strokeColor = activeWl.color;
+        } else {
+          fillColor = 'var(--text-muted)';
+          strokeColor = 'var(--border-color)';
+        }
         radius = 7;
         strokeWidth = 2;
       }
@@ -528,7 +549,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
           let op = 0.5;
           worldlines.forEach(wl => {
             if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
-              color = wl.color; w = 2.5; op = 0.85;
+              if (activeWorldlineId === wl.id) {
+                color = wl.color; w = 2.5; op = 0.85;
+              }
             }
           });
           line.attr('stroke', color).attr('stroke-width', w).attr('stroke-opacity', op);
@@ -541,7 +564,9 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
           let op = 0.5;
           worldlines.forEach(wl => {
             if (wl.paperIds.has(citing) && wl.paperIds.has(cited)) {
-              color = wl.color; op = 0.85;
+              if (activeWorldlineId === wl.id) {
+                color = wl.color; op = 0.85;
+              }
             }
           });
           poly.attr('fill', color).attr('opacity', op);
@@ -561,6 +586,10 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
         clickTimerRef.current = setTimeout(() => {
           clickTimerRef.current = null;
           toggleSelection(p.id);
+          // Activate the worldline this paper belongs to
+          if (belongsToWorldlines.length > 0) {
+            setActiveWorldlineId(belongsToWorldlines[0].id);
+          }
         }, 250);
       });
 
@@ -693,7 +722,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
       .attr('font-size', '12px')
       .text('Publication Date');
 
-  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, showCitations, showWorldlines, showNonWorldlinePapers]);
+  }, [papers, paperPositions, citations, worldlines, selectedPaperIds, activeWorldlineId, showCitations, showWorldlines, showNonWorldlinePapers]);
 
   // Resize handler
   useEffect(() => {
@@ -1116,7 +1145,7 @@ export default function WorldlinePanel({ papers, showNotification, onRefresh, on
                 <div className="wl-section-header">
                   <h4>Selected ({selectedPaperIds.size})</h4>
                   {selectedPaperIds.size > 0 && (
-                    <button className="btn-link" onClick={() => setSelectedPaperIds(new Set())}>
+                    <button className="btn-link" onClick={() => { setSelectedPaperIds(new Set()); setActiveWorldlineId(null); }}>
                       Clear
                     </button>
                   )}
