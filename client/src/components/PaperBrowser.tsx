@@ -413,12 +413,6 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                       {isSaving ? 'Saving...' : 'Save'}
                     </button>
                   )}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => onOpenPaper(paper)}
-                  >
-                    Open
-                  </button>
                 </div>
               </div>
 
