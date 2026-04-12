@@ -20,7 +20,9 @@ type IconName =
   | 'users'
   | 'branch'
   | 'chat'
-  | 'arrow-left';
+  | 'arrow-left'
+  | 'sidebar-left'
+  | 'sidebar-right';
 
 interface IconProps {
   name: IconName;
@@ -92,6 +94,18 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   'arrow-left': (
     <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  ),
+  'sidebar-left': (
+    <>
+      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.2" />
+    </>
+  ),
+  'sidebar-right': (
+    <>
+      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <line x1="10" y1="2" x2="10" y2="14" stroke="currentColor" strokeWidth="1.2" />
+    </>
   ),
 };
 

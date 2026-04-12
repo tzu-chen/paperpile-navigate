@@ -295,15 +295,16 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
             jumpToPage={jumpToPage}
             onJumpApplied={() => setJumpToPage(undefined)}
           />
+          <div className="panel-zone">
+            <button
+              className={`floating-toggle ${sidebarVisible ? 'floating-toggle-active' : ''}`}
+              onClick={() => setSidebarVisible(v => !v)}
+              title={sidebarVisible ? 'Hide panel' : 'Show panel'}
+            >
+              <Icon name="sidebar-right" />
+            </button>
+          </div>
         </div>
-
-        <button
-          className="sidebar-toggle"
-          onClick={() => setSidebarVisible(v => !v)}
-          title={sidebarVisible ? 'Hide panel' : 'Show panel'}
-        >
-          {sidebarVisible ? <Icon name="chevron-right" /> : <Icon name="chevron-left" />}
-        </button>
 
         {sidebarVisible && <div className="viewer-sidebar-backdrop active" onClick={() => setSidebarVisible(false)} />}
         {sidebarVisible && <div className="viewer-sidebar">

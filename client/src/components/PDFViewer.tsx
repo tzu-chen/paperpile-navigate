@@ -368,15 +368,6 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     <div className={`pdf-viewer ${pdfDarkTheme ? 'pdf-dark-theme' : ''}`}>
       <div className="pdf-toolbar">
         <div className="pdf-toolbar-group">
-          {outline.length > 0 && (
-            <button
-              className={`pdf-nav-btn ${outlineOpen ? 'pdf-nav-btn-active' : ''}`}
-              onClick={() => setOutlineOpen(o => !o)}
-              title="Toggle outline"
-            >
-              <Icon name="hamburger" />
-            </button>
-          )}
           <button
             className="pdf-nav-btn"
             onClick={() => goToPage(currentPage - 1)}
@@ -453,15 +444,6 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
       )}
 
       <div className="pdf-content-area">
-        {onToggleImmersive && (
-          <button
-            className={`pdf-fullscreen-btn ${immersiveMode ? 'pdf-nav-btn-active' : ''}`}
-            onClick={onToggleImmersive}
-            title={immersiveMode ? 'Exit immersive mode (Esc)' : 'Immersive mode — hide all toolbars'}
-          >
-            {immersiveMode ? <Icon name="close" /> : <Icon name="expand" />}
-          </button>
-        )}
         {outlineOpen && outline.length > 0 && (
           <div className="pdf-outline-panel">
             <div className="pdf-outline-header">
@@ -480,7 +462,30 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
           </div>
         )}
 
-        <div className="pdf-pages-container" ref={containerRef}>
+        <div className="pdf-pages-wrapper">
+          {outline.length > 0 && (
+            <div className="toc-zone">
+              <button
+                className={`floating-toggle ${outlineOpen ? 'floating-toggle-active' : ''}`}
+                onClick={() => setOutlineOpen(o => !o)}
+                title="Table of contents"
+              >
+                <Icon name="sidebar-left" />
+              </button>
+            </div>
+          )}
+          {onToggleImmersive && (
+            <div className="immersive-zone">
+              <button
+                className={`floating-toggle ${immersiveMode ? 'floating-toggle-active' : ''}`}
+                onClick={onToggleImmersive}
+                title={immersiveMode ? 'Exit immersive mode (Esc)' : 'Immersive mode — hide all toolbars'}
+              >
+                {immersiveMode ? <Icon name="close" /> : <Icon name="expand" />}
+              </button>
+            </div>
+          )}
+          <div className="pdf-pages-container" ref={containerRef}>
           <Document
             file={pdfUrl}
             onLoadSuccess={onDocumentLoadSuccess}
@@ -516,6 +521,7 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
               </div>
             ))}
           </Document>
+        </div>
         </div>
       </div>
     </div>

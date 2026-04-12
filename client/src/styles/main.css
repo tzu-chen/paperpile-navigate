@@ -1246,28 +1246,84 @@ input[type="color"] {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  position: relative;
 }
 
-.sidebar-toggle {
+/* Floating toggle zones — hover-reveal buttons at corners of the PDF area */
+.toc-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60px;
+  height: 60px;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px;
+  pointer-events: auto;
+}
+
+.panel-zone {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 10px;
+  pointer-events: auto;
+}
+
+.immersive-zone {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 10px;
+  pointer-events: auto;
+}
+
+.floating-toggle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
   background: var(--bg-secondary);
-  border: none;
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
-  font-size: 10px;
-  flex-shrink: 0;
-  transition: all var(--transition);
-  padding: 0;
 }
 
-.sidebar-toggle:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+.toc-zone:hover .floating-toggle,
+.panel-zone:hover .floating-toggle,
+.immersive-zone:hover .floating-toggle {
+  opacity: 1;
+}
+
+.floating-toggle:hover {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.floating-toggle-active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 /* Immersive mode — hides header, sidebar, and PDF toolbar */
@@ -1275,7 +1331,7 @@ input[type="color"] {
   display: none;
 }
 
-.paper-viewer.immersive-mode .sidebar-toggle {
+.paper-viewer.immersive-mode .panel-zone {
   display: none;
 }
 
@@ -1283,39 +1339,20 @@ input[type="color"] {
   display: none;
 }
 
+/* In immersive mode, active toggles should still hide until hovered */
+.paper-viewer.immersive-mode .floating-toggle-active {
+  opacity: 0;
+}
+
+.paper-viewer.immersive-mode .toc-zone:hover .floating-toggle-active,
+.paper-viewer.immersive-mode .immersive-zone:hover .floating-toggle-active {
+  opacity: 1;
+}
+
 .paper-viewer.immersive-mode .pdf-toolbar {
   display: none;
 }
 
-.pdf-fullscreen-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 15;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s ease, background 0.2s ease;
-}
-
-.pdf-fullscreen-btn:hover {
-  opacity: 1;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.paper-viewer.immersive-mode .pdf-fullscreen-btn {
-  top: 12px;
-  right: 12px;
-}
 
 .viewer-sidebar {
   width: 360px;
@@ -1449,6 +1486,15 @@ input[type="color"] {
   color: var(--text-secondary);
   min-width: 40px;
   text-align: center;
+}
+
+.pdf-pages-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .pdf-pages-container {
@@ -4269,8 +4315,8 @@ input[type="color"] {
     z-index: 199;
   }
 
-  /* Hide sidebar toggle on mobile */
-  .sidebar-toggle {
+  /* Hide panel zone on mobile (sidebar uses full-screen overlay instead) */
+  .panel-zone {
     display: none;
   }
 
