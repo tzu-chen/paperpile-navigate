@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
@@ -33,6 +33,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
   const [filterWorldline, setFilterWorldline] = useState<number | null>(null);
+  const [filterCategory, setFilterCategory] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#6366f1');
@@ -108,12 +109,41 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   useEffect(() => {
     setSelectedPaperIds(new Set());
     setSelectMode(false);
-  }, [filterStatus, filterTag, filterWorldline, searchTerm]);
+  }, [filterStatus, filterTag, filterWorldline, filterCategory, searchTerm]);
+
+  // Compute unique categories from all papers for the filter dropdown
+  const availableCategories = useMemo(() => {
+    const catSet = new Set<string>();
+    for (const p of papers) {
+      try {
+        const cats = JSON.parse(p.categories) as string[];
+        for (const c of cats) catSet.add(c);
+      } catch { /* ignore */ }
+    }
+    return Array.from(catSet).sort();
+  }, [papers]);
+
+  // Group categories by prefix for the dropdown
+  const groupedCategories = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const cat of availableCategories) {
+      const prefix = cat.includes('.') ? cat.split('.')[0] : cat;
+      if (!groups[prefix]) groups[prefix] = [];
+      groups[prefix].push(cat);
+    }
+    return groups;
+  }, [availableCategories]);
 
   const filteredPapers = papers.filter(p => {
     if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
     if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
     if (filterStatus && p.status !== filterStatus) return false;
+    if (filterCategory) {
+      try {
+        const cats = JSON.parse(p.categories) as string[];
+        if (!cats.includes(filterCategory)) return false;
+      } catch { return false; }
+    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const matchTitle = p.title.toLowerCase().includes(term);
@@ -447,7 +477,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     }
   }
 
-  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || searchTerm !== '';
+  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || filterCategory !== '' || searchTerm !== '';
 
 
   return (
@@ -589,6 +619,24 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                 ))}
               </select>
             </div>
+
+            {availableCategories.length > 0 && (
+              <div className="control-group">
+                <select
+                  value={filterCategory}
+                  onChange={e => setFilterCategory(e.target.value)}
+                >
+                  <option value="">All Categories</option>
+                  {Object.entries(groupedCategories).map(([prefix, cats]) => (
+                    <optgroup key={prefix} label={prefix}>
+                      {cats.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="control-group">
               <button
