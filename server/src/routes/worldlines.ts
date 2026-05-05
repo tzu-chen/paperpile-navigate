@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import * as db from '../services/database';
-import { getArxivPaper } from '../services/arxiv';
+import { getArxivPapers } from '../services/arxiv';
+import { ArxivPaper } from '../types';
 import { computeWorldlineSimilarity, PaperSimilarityResult } from '../services/similarity';
 
 const router = Router();
@@ -131,33 +132,42 @@ router.post('/batch-import', async (req: Request, res: Response) => {
     const savedPapers: any[] = [];
     const errors: string[] = [];
 
+    // Prefetch any papers not already in the DB in a single batched arXiv call
+    const missingIds = uniqueIds.filter(id => !db.getPaperByArxivId(id));
+    let fetched = new Map<string, ArxivPaper>();
+    if (missingIds.length > 0) {
+      try {
+        fetched = await getArxivPapers(missingIds);
+      } catch (err) {
+        console.error('Batch ArXiv fetch failed:', err);
+        for (const id of missingIds) errors.push(`Failed to fetch: ${id}`);
+      }
+    }
+
     for (const arxivId of uniqueIds) {
       let paper = db.getPaperByArxivId(arxivId) as any;
       if (!paper) {
-        try {
-          const arxivPaper = await getArxivPaper(arxivId);
-          if (!arxivPaper) {
+        const arxivPaper = fetched.get(arxivId);
+        if (!arxivPaper) {
+          if (!errors.some(e => e.endsWith(arxivId))) {
             errors.push(`Not found: ${arxivId}`);
-            continue;
           }
-          const result = db.savePaper({
-            arxiv_id: arxivPaper.id,
-            title: arxivPaper.title,
-            summary: arxivPaper.summary,
-            authors: JSON.stringify(arxivPaper.authors),
-            published: arxivPaper.published,
-            updated: arxivPaper.updated,
-            categories: JSON.stringify(arxivPaper.categories),
-            pdf_url: arxivPaper.pdfUrl,
-            abs_url: arxivPaper.absUrl,
-            doi: arxivPaper.doi,
-            journal_ref: arxivPaper.journalRef,
-          });
-          paper = db.getPaper(result.lastInsertRowid as number);
-        } catch (err) {
-          errors.push(`Failed to fetch: ${arxivId}`);
           continue;
         }
+        const result = db.savePaper({
+          arxiv_id: arxivPaper.id,
+          title: arxivPaper.title,
+          summary: arxivPaper.summary,
+          authors: JSON.stringify(arxivPaper.authors),
+          published: arxivPaper.published,
+          updated: arxivPaper.updated,
+          categories: JSON.stringify(arxivPaper.categories),
+          pdf_url: arxivPaper.pdfUrl,
+          abs_url: arxivPaper.absUrl,
+          doi: arxivPaper.doi,
+          journal_ref: arxivPaper.journalRef,
+        });
+        paper = db.getPaper(result.lastInsertRowid as number);
       }
       paperMap.set(arxivId, paper.id);
       savedPapers.push(paper);

@@ -3,6 +3,62 @@ import { ArxivPaper } from '../types';
 
 const ARXIV_API_BASE = 'http://export.arxiv.org/api/query';
 
+const MIN_API_INTERVAL_MS = 3000; // arXiv asks for ≥3s between API calls
+const MIN_HTML_INTERVAL_MS = 1000; // HTML/RSS endpoints share a separate gate
+
+const USER_AGENT =
+  'navigate/0.1 (https://github.com/tzu-chen/navigate; mailto:tzu.chen.jimmy.huang@gmail.com)';
+
+function makeGate(minIntervalMs: number) {
+  let lastCall = 0;
+  let chain: Promise<void> = Promise.resolve();
+  return async function gated<T>(fn: () => Promise<T>): Promise<T> {
+    const myTurn = chain.then(async () => {
+      const wait = Math.max(0, lastCall + minIntervalMs - Date.now());
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      lastCall = Date.now();
+    });
+    chain = myTurn.catch(() => {}); // never let one failure block the queue
+    await myTurn;
+    return fn();
+  };
+}
+
+const apiGate = makeGate(MIN_API_INTERVAL_MS);
+const htmlGate = makeGate(MIN_HTML_INTERVAL_MS);
+
+export async function arxivFetch(
+  url: string,
+  opts: { gate: 'api' | 'html'; init?: RequestInit; maxRetries?: number } = { gate: 'api' }
+): Promise<Response> {
+  const { gate, init, maxRetries = 3 } = opts;
+  const runner = gate === 'api' ? apiGate : htmlGate;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await runner(() =>
+      fetch(url, {
+        ...init,
+        headers: {
+          'User-Agent': USER_AGENT,
+          ...(init?.headers || {}),
+        },
+      })
+    );
+
+    if (res.status !== 429 && res.status !== 503) return res;
+    if (attempt === maxRetries) return res;
+
+    const retryAfter = parseInt(res.headers.get('retry-after') || '', 10);
+    const backoff = Number.isFinite(retryAfter)
+      ? retryAfter * 1000
+      : Math.min(60_000, 2_000 * Math.pow(2, attempt)) + Math.random() * 500;
+    try { await res.arrayBuffer(); } catch { /* ignore */ }
+    console.warn(`arxivFetch: ${res.status} for ${url}, retrying in ${Math.round(backoff)}ms (attempt ${attempt + 1}/${maxRetries})`);
+    await new Promise(r => setTimeout(r, backoff));
+  }
+  throw new Error('arxivFetch: exhausted retries');
+}
+
 interface ArxivEntry {
   id: string[];
   title: string[];
@@ -76,7 +132,7 @@ export async function searchArxiv(params: {
 
   const url = `${ARXIV_API_BASE}?search_query=${searchQuery}&start=${start}&max_results=${maxResults}&sortBy=${sortBy}&sortOrder=descending`;
 
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'api' });
   if (!response.ok) {
     throw new Error(`ArXiv API error: ${response.status} ${response.statusText}`);
   }
@@ -95,12 +151,21 @@ export async function searchArxiv(params: {
   return { papers, totalResults };
 }
 
+const AUTHOR_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const authorCache = new Map<string, { papers: ArxivPaper[]; totalResults: number; fetchedAt: number }>();
+
 export async function searchByAuthor(authorName: string, maxResults: number = 20): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
+  const cacheKey = `${authorName}::${maxResults}`;
+  const hit = authorCache.get(cacheKey);
+  if (hit && Date.now() - hit.fetchedAt < AUTHOR_CACHE_TTL_MS) {
+    return { papers: hit.papers, totalResults: hit.totalResults };
+  }
+
   const quoted = `"${authorName}"`;
   const encoded = encodeURIComponent(quoted);
   const url = `${ARXIV_API_BASE}?search_query=au:${encoded}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
 
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'api' });
   if (!response.ok) {
     throw new Error(`ArXiv API error: ${response.status} ${response.statusText}`);
   }
@@ -112,10 +177,13 @@ export async function searchByAuthor(authorName: string, maxResults: number = 20
   const totalResults = parseInt(feed['opensearch:totalResults']?.[0]?._ || '0', 10);
 
   if (!feed.entry) {
-    return { papers: [], totalResults: 0 };
+    const empty = { papers: [], totalResults: 0 };
+    authorCache.set(cacheKey, { ...empty, fetchedAt: Date.now() });
+    return empty;
   }
 
   const papers = feed.entry.map((entry: ArxivEntry) => parseEntry(entry));
+  authorCache.set(cacheKey, { papers, totalResults, fetchedAt: Date.now() });
   return { papers, totalResults };
 }
 
@@ -275,7 +343,7 @@ function parseNewListingsHtml(html: string): ArxivPaper[] {
 
 async function fetchNewListingsHtml(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
   const url = `https://arxiv.org/list/${encodeURIComponent(category)}/new`;
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'html' });
   if (!response.ok) {
     throw new Error(`ArXiv listing page error: ${response.status} ${response.statusText}`);
   }
@@ -292,7 +360,7 @@ async function fetchNewListingsHtml(category: string): Promise<{ papers: ArxivPa
 
 async function fetchLatestArxivRss(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
   const url = `https://rss.arxiv.org/rss/${encodeURIComponent(category)}`;
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'html' });
   if (!response.ok) {
     throw new Error(`ArXiv RSS error: ${response.status} ${response.statusText}`);
   }
@@ -411,7 +479,7 @@ function parseRecentListingsHtml(html: string): ArxivPaper[] {
 
 export async function fetchRecentArxiv(category: string): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
   const url = `https://arxiv.org/list/${encodeURIComponent(category)}/recent?show=2000`;
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'html' });
   if (!response.ok) {
     throw new Error(`ArXiv recent listing error: ${response.status} ${response.statusText}`);
   }
@@ -424,7 +492,7 @@ export async function fetchRecentArxiv(category: string): Promise<{ papers: Arxi
 
 export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null> {
   const url = `${ARXIV_API_BASE}?id_list=${arxivId}`;
-  const response = await fetch(url);
+  const response = await arxivFetch(url, { gate: 'api' });
   if (!response.ok) {
     throw new Error(`ArXiv API error: ${response.status} ${response.statusText}`);
   }
@@ -437,4 +505,29 @@ export async function getArxivPaper(arxivId: string): Promise<ArxivPaper | null>
   }
 
   return parseEntry(result.feed.entry[0]);
+}
+
+export async function getArxivPapers(ids: string[]): Promise<Map<string, ArxivPaper>> {
+  const out = new Map<string, ArxivPaper>();
+  if (ids.length === 0) return out;
+
+  // arXiv accepts up to a few hundred IDs per id_list; chunk to be safe.
+  const CHUNK = 100;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const url = `${ARXIV_API_BASE}?id_list=${chunk.join(',')}&max_results=${chunk.length}`;
+    const response = await arxivFetch(url, { gate: 'api' });
+    if (!response.ok) {
+      throw new Error(`ArXiv API error: ${response.status} ${response.statusText}`);
+    }
+    const xml = await response.text();
+    const result = await parseStringPromise(xml);
+    const entries = result.feed?.entry;
+    if (!entries) continue;
+    for (const entry of entries) {
+      const paper = parseEntry(entry);
+      out.set(paper.id, paper);
+    }
+  }
+  return out;
 }
