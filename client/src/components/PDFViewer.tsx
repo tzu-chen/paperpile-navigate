@@ -4,6 +4,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 import Icon from './Icon';
+import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -306,6 +307,9 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
 
   const zoomIn = () => setScale(s => Math.min(s + 0.2, 3));
   const zoomOut = () => setScale(s => Math.max(s - 0.2, 0.4));
+
+  const toggleOutline = useCallback(() => setOutlineOpen(o => !o), []);
+  useKeyboardShortcut('pdfTocToggle', toggleOutline, outline.length > 0);
 
   const togglePdfDarkTheme = () => {
     setPdfDarkTheme(prev => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArxivPaper, SavedPaper, Tag, FavoriteAuthor, ViewMode } from './types';
 import * as api from './services/api';
 import { getSchemeById, applyColorScheme } from './colorSchemes';
+import { useKeyboardShortcut } from './hooks/useKeyboardShortcut';
 import PaperBrowser from './components/PaperBrowser';
 import Library from './components/Library';
 import PaperViewer from './components/PaperViewer';
@@ -181,6 +182,19 @@ export default function App() {
       loadLibrary();
     }
   };
+
+  const navigateTo = useCallback((target: ViewMode) => {
+    setSelectedPaper(null);
+    setPreviewPaper(null);
+    setImmersiveMode(false);
+    setViewMode(target);
+    if (target === 'library') loadLibrary();
+  }, [loadLibrary]);
+
+  // Settings modal blocks shortcuts so the user can rebind without firing actions.
+  const shortcutsEnabled = !settingsOpen;
+  useKeyboardShortcut('goToLibrary', () => navigateTo('library'), shortcutsEnabled);
+  useKeyboardShortcut('goToBrowse', () => navigateTo('browse'), shortcutsEnabled);
 
   return (
     <div className="app">

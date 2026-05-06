@@ -11,6 +11,7 @@ import WorldlineInfoPanel from './WorldlineInfoPanel';
 import BatchImportPanel from './BatchImportPanel';
 import LaTeX from './LaTeX';
 import Icon from './Icon';
+import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
 
 function isSavedPaper(paper: SavedPaper | ArxivPaper): paper is SavedPaper {
   return 'arxiv_id' in paper;
@@ -123,6 +124,9 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
       if (isSavedPaper(paper)) setActivePanel('comments');
     }
   }, [initialPage, paper]);
+
+  const togglePanel = useCallback(() => setSidebarVisible(v => !v), []);
+  useKeyboardShortcut('pdfPanelToggle', togglePanel);
 
   // Swipe left/right to navigate between papers (mobile)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);

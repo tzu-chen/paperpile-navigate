@@ -1,12 +1,72 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as api from '../services/api';
-import type { AppSettings } from '../services/api';
 import { COLOR_SCHEMES, applyColorScheme, getSchemeById } from '../colorSchemes';
+import { useKeybindings } from '../contexts/KeybindingsContext';
+import { KEYBINDING_META, type KeybindingAction, type KeybindingsConfig } from '../types/keybindings';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   showNotification: (msg: string) => void;
+}
+
+type Tab = 'general' | 'shortcuts';
+
+function formatKey(key: string): string {
+  if (!key) return '—';
+  if (key === ' ') return 'Space';
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function ShortcutRow({ action, label, scope }: { action: KeybindingAction; label: string; scope: string }) {
+  const { keybindings, setKeybinding } = useKeybindings();
+  const [recording, setRecording] = useState(false);
+
+  useEffect(() => {
+    if (!recording) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        setRecording(false);
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1) return;
+      setKeybinding(action, e.key.toLowerCase());
+      setRecording(false);
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [recording, action, setKeybinding]);
+
+  return (
+    <div className="shortcut-row">
+      <div className="shortcut-info">
+        <span className="shortcut-label">{label}</span>
+        <span className="shortcut-scope">{scope}</span>
+      </div>
+      <button
+        type="button"
+        className={`key-button ${recording ? 'key-button-recording' : ''}`}
+        onClick={() => setRecording(r => !r)}
+        title={recording ? 'Press a key (Esc to cancel)' : 'Click to rebind'}
+      >
+        {recording ? 'Press a key…' : formatKey(keybindings[action])}
+      </button>
+    </div>
+  );
+}
+
+function findDuplicate(action: KeybindingAction, key: string, all: KeybindingsConfig): KeybindingAction | null {
+  for (const other of Object.keys(all) as KeybindingAction[]) {
+    if (other !== action && all[other] === key) return other;
+  }
+  return null;
 }
 
 export default function SettingsModal({ open, onClose, showNotification }: Props) {
@@ -17,6 +77,11 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const [verifying, setVerifying] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>('general');
+  const overlayMouseDownRef = useRef(false);
+
+  const { keybindings, resetKeybindings } = useKeybindings();
+  const hasConflict = KEYBINDING_META.some(m => findDuplicate(m.action, keybindings[m.action], keybindings));
 
   useEffect(() => {
     if (open) {
@@ -106,14 +171,34 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const maskedKey = apiKey ? apiKey.slice(0, 10) + '...' + apiKey.slice(-4) : '';
 
   return (
-    <div className="settings-overlay" onClick={handleCancel}>
+    <div
+      className="settings-overlay"
+      onMouseDown={e => { overlayMouseDownRef.current = e.target === e.currentTarget; }}
+      onClick={e => {
+        if (overlayMouseDownRef.current && e.target === e.currentTarget) handleCancel();
+        overlayMouseDownRef.current = false;
+      }}
+    >
       <div className="settings-modal" onClick={e => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>Settings</h2>
+          <div className="settings-tabs">
+            <button
+              className={`settings-tab ${tab === 'general' ? 'active' : ''}`}
+              onClick={() => setTab('general')}
+            >
+              General
+            </button>
+            <button
+              className={`settings-tab ${tab === 'shortcuts' ? 'active' : ''}`}
+              onClick={() => setTab('shortcuts')}
+            >
+              Shortcuts
+            </button>
+          </div>
           <button className="btn-icon" onClick={handleCancel}>&times;</button>
         </div>
 
-        {loading ? (
+        {tab === 'general' && (loading ? (
           <div className="settings-body" style={{ textAlign: 'center', padding: '2rem' }}>
             Loading settings...
           </div>
@@ -283,11 +368,40 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
               </div>
             </div>
           </div>
+        ))}
+
+        {tab === 'shortcuts' && (
+          <div className="settings-body">
+            <div className="settings-section">
+              <h3>Keyboard Shortcuts</h3>
+              <p className="settings-description">
+                Click a key to rebind. Single-character keys only; Esc cancels recording.
+                Shortcuts only fire when no input is focused.
+              </p>
+              <div className="shortcut-list">
+                {KEYBINDING_META.map(m => (
+                  <ShortcutRow key={m.action} action={m.action} label={m.label} scope={m.scope} />
+                ))}
+              </div>
+              {hasConflict && (
+                <p className="shortcut-warning">
+                  Duplicate key assigned — only one action will fire.
+                </p>
+              )}
+              <div className="settings-actions" style={{ marginTop: 16 }}>
+                <button className="btn btn-secondary btn-sm" onClick={resetKeybindings}>
+                  Reset to defaults
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="settings-footer">
           <button className="btn btn-secondary" onClick={handleCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={loading}>Save</button>
+          {tab === 'general' && (
+            <button className="btn btn-primary" onClick={handleSave} disabled={loading}>Save</button>
+          )}
         </div>
       </div>
     </div>
