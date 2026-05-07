@@ -1,9 +1,26 @@
 import { Router, Request, Response } from 'express';
 import { searchArxiv, getArxivPaper, fetchLatestArxiv, fetchRecentArxiv } from '../services/arxiv';
-import { ARXIV_CATEGORY_GROUPS } from '../types';
+import { ARXIV_CATEGORY_GROUPS, ArxivPaper } from '../types';
 import { getLocalPdfPathForArxivId, initializePdfStorage } from '../services/pdf';
+import { getSetting } from '../services/database';
 import fs from 'fs';
 import path from 'path';
+
+const MAX_FAVORITE_CATEGORIES = 5;
+const FAVORITES_CACHE_TTL_MS = 15 * 60 * 1000;
+
+interface FavoritesPaper extends ArxivPaper {
+  matchedCategories: string[];
+}
+
+interface FavoritesCacheEntry {
+  papers: FavoritesPaper[];
+  totalResults: number;
+  fetchedAt: number;
+  categoriesKey: string;
+}
+
+let favoritesCache: FavoritesCacheEntry | null = null;
 
 const router = Router();
 
@@ -75,6 +92,85 @@ router.get('/latest', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('ArXiv latest fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch latest ArXiv papers' });
+  }
+});
+
+// GET /api/arxiv/favorites - Aggregate latest listings across the user's favorite categories
+router.get('/favorites', async (_req: Request, res: Response) => {
+  try {
+    const raw = getSetting('favoriteCategories') || '';
+    const categories = raw
+      .split(',')
+      .map(c => c.trim())
+      .filter(Boolean)
+      .slice(0, MAX_FAVORITE_CATEGORIES);
+
+    if (categories.length === 0) {
+      return res.json({ papers: [], totalResults: 0, categories: [], cached: false });
+    }
+
+    const categoriesKey = [...categories].sort().join('|');
+
+    if (
+      favoritesCache &&
+      favoritesCache.categoriesKey === categoriesKey &&
+      Date.now() - favoritesCache.fetchedAt < FAVORITES_CACHE_TTL_MS
+    ) {
+      return res.json({
+        papers: favoritesCache.papers,
+        totalResults: favoritesCache.totalResults,
+        categories,
+        cached: true,
+        fetchedAt: new Date(favoritesCache.fetchedAt).toISOString(),
+      });
+    }
+
+    // Sequential fetches; the underlying arxivFetch enforces minimum intervals.
+    const seen = new Map<string, FavoritesPaper>();
+    const errors: string[] = [];
+    for (const category of categories) {
+      try {
+        const result = await fetchLatestArxiv(category);
+        for (const paper of result.papers) {
+          const existing = seen.get(paper.id);
+          if (existing) {
+            if (!existing.matchedCategories.includes(category)) {
+              existing.matchedCategories.push(category);
+            }
+          } else {
+            seen.set(paper.id, { ...paper, matchedCategories: [category] });
+          }
+        }
+      } catch (err) {
+        console.warn(`Favorites: failed to fetch ${category}:`, err);
+        errors.push(category);
+      }
+    }
+
+    const papers = Array.from(seen.values()).sort((a, b) => {
+      const da = new Date(a.published).getTime();
+      const db = new Date(b.published).getTime();
+      return db - da;
+    });
+
+    favoritesCache = {
+      papers,
+      totalResults: papers.length,
+      fetchedAt: Date.now(),
+      categoriesKey,
+    };
+
+    res.json({
+      papers,
+      totalResults: papers.length,
+      categories,
+      cached: false,
+      fetchedAt: new Date(favoritesCache.fetchedAt).toISOString(),
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error('ArXiv favorites fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch favorite categories' });
   }
 });
 

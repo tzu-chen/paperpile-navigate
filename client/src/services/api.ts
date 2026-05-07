@@ -43,6 +43,17 @@ export async function getRecentArxiv(category: string): Promise<{ papers: ArxivP
   return request(`/arxiv/recent?category=${encodeURIComponent(category)}`);
 }
 
+export async function getFavoriteCategoriesFeed(): Promise<{
+  papers: (ArxivPaper & { matchedCategories: string[] })[];
+  totalResults: number;
+  categories: string[];
+  cached: boolean;
+  fetchedAt?: string;
+  errors?: string[];
+}> {
+  return request('/arxiv/favorites');
+}
+
 export async function getArxivPaper(id: string): Promise<ArxivPaper> {
   return request(`/arxiv/paper/${encodeURIComponent(id)}`);
 }
@@ -548,14 +559,27 @@ export interface AppSettings {
   colorScheme: string;
   similarityThreshold: number;
   cardFontSize: number;
+  favoriteCategories: string[];
 }
+
+export const MAX_FAVORITE_CATEGORIES = 5;
 
 const DEFAULT_SETTINGS: AppSettings = {
   claudeApiKey: '',
   colorScheme: 'default-dark',
   similarityThreshold: 0.82,
   cardFontSize: 1,
+  favoriteCategories: [],
 };
+
+function parseFavoriteCategories(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(c => c.trim())
+    .filter(Boolean)
+    .slice(0, MAX_FAVORITE_CATEGORIES);
+}
 
 interface VisualPrefs {
   colorScheme: string;
@@ -591,6 +615,7 @@ export async function getSettings(): Promise<AppSettings> {
       similarityThreshold: serverSettings.similarityThreshold
         ? parseFloat(serverSettings.similarityThreshold)
         : DEFAULT_SETTINGS.similarityThreshold,
+      favoriteCategories: parseFavoriteCategories(serverSettings.favoriteCategories),
       colorScheme: visualPrefs.colorScheme,
       cardFontSize: visualPrefs.cardFontSize,
     };
@@ -608,6 +633,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     body: JSON.stringify({
       claudeApiKey: settings.claudeApiKey,
       similarityThreshold: String(settings.similarityThreshold),
+      favoriteCategories: settings.favoriteCategories.slice(0, MAX_FAVORITE_CATEGORIES).join(','),
     }),
   });
 }

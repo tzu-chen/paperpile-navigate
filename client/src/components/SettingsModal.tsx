@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as api from '../services/api';
+import { MAX_FAVORITE_CATEGORIES } from '../services/api';
 import { COLOR_SCHEMES, applyColorScheme, getSchemeById } from '../colorSchemes';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { KEYBINDING_META, type KeybindingAction, type KeybindingsConfig } from '../types/keybindings';
+import { CategoryGroup } from '../types';
 
 interface Props {
   open: boolean;
@@ -10,7 +12,7 @@ interface Props {
   showNotification: (msg: string) => void;
 }
 
-type Tab = 'general' | 'shortcuts';
+type Tab = 'general' | 'categories' | 'shortcuts';
 
 function formatKey(key: string): string {
   if (!key) return '—';
@@ -74,6 +76,9 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const [colorScheme, setColorScheme] = useState('default-dark');
   const [similarityThreshold, setSimilarityThreshold] = useState(0.82);
   const [cardFontSize, setCardFontSize] = useState<number>(1);
+  const [favoriteCategories, setFavoriteCategories] = useState<string[]>([]);
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
+  const [categorySearch, setCategorySearch] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -87,17 +92,38 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
     if (open) {
       setLoading(true);
       setShowKey(false);
+      setCategorySearch('');
       api.getSettings().then(settings => {
         setApiKey(settings.claudeApiKey);
         setColorScheme(settings.colorScheme);
         setSimilarityThreshold(settings.similarityThreshold);
         setCardFontSize(settings.cardFontSize);
+        setFavoriteCategories(settings.favoriteCategories);
         setLoading(false);
       }).catch(() => {
         setLoading(false);
       });
+      if (categoryGroups.length === 0) {
+        api.getCategories().then(setCategoryGroups).catch(() => {});
+      }
     }
   }, [open]);
+
+  const filteredCategoryGroups = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return categoryGroups;
+    return categoryGroups
+      .map(group => {
+        const matches: Record<string, string> = {};
+        for (const [key, name] of Object.entries(group.categories)) {
+          if (key.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+            matches[key] = name;
+          }
+        }
+        return { label: group.label, categories: matches };
+      })
+      .filter(group => Object.keys(group.categories).length > 0);
+  }, [categoryGroups, categorySearch]);
 
   if (!open) return null;
 
@@ -111,7 +137,13 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
 
   const handleSave = async () => {
     try {
-      await api.saveSettings({ claudeApiKey: apiKey.trim(), colorScheme, similarityThreshold, cardFontSize });
+      await api.saveSettings({
+        claudeApiKey: apiKey.trim(),
+        colorScheme,
+        similarityThreshold,
+        cardFontSize,
+        favoriteCategories,
+      });
       api.applyCardFontSize(cardFontSize);
       showNotification('Settings saved');
       onClose();
@@ -161,11 +193,30 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const handleClear = async () => {
     setApiKey('');
     try {
-      await api.saveSettings({ claudeApiKey: '', colorScheme, similarityThreshold, cardFontSize });
+      await api.saveSettings({
+        claudeApiKey: '',
+        colorScheme,
+        similarityThreshold,
+        cardFontSize,
+        favoriteCategories,
+      });
       showNotification('API key removed');
     } catch {
       showNotification('Failed to remove API key');
     }
+  };
+
+  const toggleFavoriteCategory = (key: string) => {
+    setFavoriteCategories(prev => {
+      if (prev.includes(key)) {
+        return prev.filter(c => c !== key);
+      }
+      if (prev.length >= MAX_FAVORITE_CATEGORIES) {
+        showNotification(`You can pick at most ${MAX_FAVORITE_CATEGORIES} favorite categories`);
+        return prev;
+      }
+      return [...prev, key];
+    });
   };
 
   const maskedKey = apiKey ? apiKey.slice(0, 10) + '...' + apiKey.slice(-4) : '';
@@ -187,6 +238,12 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
               onClick={() => setTab('general')}
             >
               General
+            </button>
+            <button
+              className={`settings-tab ${tab === 'categories' ? 'active' : ''}`}
+              onClick={() => setTab('categories')}
+            >
+              Categories
             </button>
             <button
               className={`settings-tab ${tab === 'shortcuts' ? 'active' : ''}`}
@@ -370,6 +427,85 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
           </div>
         ))}
 
+        {tab === 'categories' && (
+          <div className="settings-body">
+            <div className="settings-section">
+              <h3>Favorite ArXiv Categories</h3>
+              <p className="settings-description">
+                Pick up to {MAX_FAVORITE_CATEGORIES} categories. The browse page can then show new
+                listings aggregated across them in one feed. Listings are cached server-side for 15
+                minutes to stay within ArXiv's rate limits.
+              </p>
+
+              <div className="favorite-categories-summary">
+                {favoriteCategories.length === 0 ? (
+                  <span className="settings-hint">None selected.</span>
+                ) : (
+                  favoriteCategories.map(key => (
+                    <span
+                      key={key}
+                      className={`category-badge cat-${key.includes('.') ? key.split('.')[0] : key}`}
+                    >
+                      {key}
+                      <button
+                        type="button"
+                        className="favorite-category-remove"
+                        onClick={() => toggleFavoriteCategory(key)}
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+                <span className="favorite-categories-count">
+                  {favoriteCategories.length}/{MAX_FAVORITE_CATEGORIES}
+                </span>
+              </div>
+
+              <div className="settings-field" style={{ marginTop: 16 }}>
+                <input
+                  type="text"
+                  value={categorySearch}
+                  onChange={e => setCategorySearch(e.target.value)}
+                  placeholder="Filter (e.g. cs.LG, machine learning)"
+                  className="settings-key-input"
+                />
+              </div>
+
+              <div className="favorite-categories-list">
+                {filteredCategoryGroups.map(group => (
+                  <div key={group.label} className="favorite-category-group">
+                    <div className="favorite-category-group-label">{group.label}</div>
+                    <div className="favorite-category-options">
+                      {Object.entries(group.categories).map(([key, name]) => {
+                        const selected = favoriteCategories.includes(key);
+                        const atLimit = !selected && favoriteCategories.length >= MAX_FAVORITE_CATEGORIES;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`favorite-category-option ${selected ? 'selected' : ''}`}
+                            onClick={() => toggleFavoriteCategory(key)}
+                            disabled={atLimit}
+                            title={atLimit ? `Limit reached (${MAX_FAVORITE_CATEGORIES})` : name}
+                          >
+                            <span className="favorite-category-key">{key}</span>
+                            <span className="favorite-category-name">{name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {filteredCategoryGroups.length === 0 && (
+                  <p className="settings-hint">No categories match.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === 'shortcuts' && (
           <div className="settings-body">
             <div className="settings-section">
@@ -399,7 +535,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
 
         <div className="settings-footer">
           <button className="btn btn-secondary" onClick={handleCancel}>Cancel</button>
-          {tab === 'general' && (
+          {(tab === 'general' || tab === 'categories') && (
             <button className="btn btn-primary" onClick={handleSave} disabled={loading}>Save</button>
           )}
         </div>

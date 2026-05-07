@@ -41,19 +41,25 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
   const [arxivIdInput, setArxivIdInput] = useState('');
   const [arxivIdError, setArxivIdError] = useState('');
   const [arxivIdLoading, setArxivIdLoading] = useState(false);
+  const [favoriteCategories, setFavoriteCategories] = useState<string[]>([]);
+  const [favoritesMode, setFavoritesMode] = useState(false);
+  const [favoritesMatchedCats, setFavoritesMatchedCats] = useState<Map<string, string[]>>(new Map());
+  const [favoritesFetchedAt, setFavoritesFetchedAt] = useState<string | null>(null);
 
   const PAGE_SIZE = 20;
 
   // Whether we're showing the latest announcement (RSS) vs paginated search
-  const isLatestMode = sortBy === 'submittedDate' && !searchQuery;
-  const isRecentlyUpdatedMode = sortBy === 'lastUpdatedDate' && !searchQuery;
-  const usesListingsPage = isLatestMode || isRecentlyUpdatedMode;
+  const isLatestMode = !favoritesMode && sortBy === 'submittedDate' && !searchQuery;
+  const isRecentlyUpdatedMode = !favoritesMode && sortBy === 'lastUpdatedDate' && !searchQuery;
+  const usesListingsPage = isLatestMode || isRecentlyUpdatedMode || favoritesMode;
 
   useEffect(() => {
     api.getCategories().then(setCategoryGroups).catch(console.error);
+    api.getSettings().then(s => setFavoriteCategories(s.favoriteCategories)).catch(() => {});
   }, []);
 
   useEffect(() => {
+    if (favoritesMode) return;
     if (isLatestMode) {
       fetchLatest();
     } else if (isRecentlyUpdatedMode) {
@@ -61,7 +67,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
     } else {
       performSearch(0);
     }
-  }, [selectedCategory, sortBy]);
+  }, [selectedCategory, sortBy, favoritesMode]);
 
   // Compute worldline similarity when papers change
   useEffect(() => {
@@ -130,6 +136,40 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
     } finally {
       setLoading(false);
     }
+  }
+
+  async function fetchFavorites() {
+    setLoading(true);
+    setActiveTab('new');
+    try {
+      const result = await api.getFavoriteCategoriesFeed();
+      setPapers(result.papers);
+      setTotalResults(result.totalResults);
+      setPage(0);
+      const matched = new Map<string, string[]>();
+      for (const p of result.papers) {
+        matched.set(p.id, p.matchedCategories);
+      }
+      setFavoritesMatchedCats(matched);
+      setFavoritesFetchedAt(result.fetchedAt || null);
+    } catch (err) {
+      console.error('Failed to fetch favorites feed:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function enterFavoritesMode() {
+    if (favoriteCategories.length === 0) return;
+    setSearchQuery('');
+    setFavoritesMode(true);
+    fetchFavorites();
+  }
+
+  function exitFavoritesMode() {
+    setFavoritesMode(false);
+    setFavoritesMatchedCats(new Map());
+    setFavoritesFetchedAt(null);
   }
 
   async function fetchRecent() {
@@ -269,6 +309,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                   const val = e.target.value;
                   setSelectedCategory(val);
                   localStorage.setItem('navigate-category', val);
+                  if (favoritesMode) exitFavoritesMode();
                 }}
               >
                 {categoryGroups.map(group => (
@@ -293,6 +334,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                   onChange={e => setSearchQuery(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
+                      if (favoritesMode) exitFavoritesMode();
                       if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
                       else if (!searchQuery && sortBy === 'lastUpdatedDate') fetchRecent();
                       else performSearch(0);
@@ -300,6 +342,7 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                   }}
                 />
                 <button onClick={() => {
+                  if (favoritesMode) exitFavoritesMode();
                   if (!searchQuery && sortBy === 'submittedDate') fetchLatest();
                   else if (!searchQuery && sortBy === 'lastUpdatedDate') fetchRecent();
                   else performSearch(0);
@@ -311,7 +354,10 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
             <div className="control-group">
               <label>Sort By</label>
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <select value={sortBy} onChange={e => {
+                setSortBy(e.target.value);
+                if (favoritesMode) exitFavoritesMode();
+              }}>
                 {SORT_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -319,9 +365,56 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
                 ))}
               </select>
             </div>
+
+            <div className="control-group">
+              <label>Favorites</label>
+              <button
+                type="button"
+                className={`btn btn-sm ${favoritesMode ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => favoritesMode ? exitFavoritesMode() : enterFavoritesMode()}
+                disabled={favoriteCategories.length === 0}
+                title={favoriteCategories.length === 0
+                  ? 'Pick favorite categories in Settings to enable'
+                  : favoritesMode
+                    ? 'Exit favorites view'
+                    : `Show new papers from ${favoriteCategories.join(', ')}`}
+              >
+                {favoritesMode ? '★ Favorites (on)' : '★ Favorites'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {favoritesMode && (
+        <div className="favorites-status-bar">
+          <span className="favorites-status-text">
+            Showing latest from{' '}
+            {favoriteCategories.map((c, i) => (
+              <span key={c}>
+                {i > 0 && ', '}
+                <span className={`category-badge cat-${c.includes('.') ? c.split('.')[0] : c}`}>{c}</span>
+              </span>
+            ))}
+          </span>
+          {favoritesFetchedAt && (
+            <span className="favorites-status-time" title={favoritesFetchedAt}>
+              Fetched {new Date(favoritesFetchedAt).toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={fetchFavorites}
+            disabled={loading}
+            title="Refresh — uses cached results if recently fetched"
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={exitFavoritesMode}>
+            Exit
+          </button>
+        </div>
+      )}
 
       {isLatestMode && !loading && (
         <div className="announcement-tabs">
@@ -356,11 +449,13 @@ export default function PaperBrowser({ onSavePaper, onOpenPaper, savedPaperIds, 
 
       {!loading && displayedPapers.length === 0 && (
         <div className="empty-state">
-          {isRecentlyUpdatedMode
-            ? 'No recent papers found for this category.'
-            : isLatestMode && papers.length > 0
-              ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
-              : 'No papers found. Try a different category or search term.'}
+          {favoritesMode
+            ? 'No new papers in your favorite categories right now.'
+            : isRecentlyUpdatedMode
+              ? 'No recent papers found for this category.'
+              : isLatestMode && papers.length > 0
+                ? `No ${activeTab === 'new' ? 'new' : activeTab === 'cross' ? 'cross-listed' : 'replacement'} papers in this announcement.`
+                : 'No papers found. Try a different category or search term.'}
         </div>
       )}
 
