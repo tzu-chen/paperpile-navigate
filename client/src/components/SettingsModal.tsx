@@ -1,7 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as api from '../services/api';
-import { MAX_FAVORITE_CATEGORIES } from '../services/api';
-import { COLOR_SCHEMES, applyColorScheme, getSchemeById } from '../colorSchemes';
+import { MAX_FAVORITE_CATEGORIES, type AutoSwitchSettings } from '../services/api';
+import {
+  COLOR_SCHEMES,
+  applyColorScheme,
+  getSchemeById,
+  DEFAULT_SCHEME_ID,
+  DEFAULT_LIGHT_SCHEME_ID,
+  DEFAULT_DARK_SCHEME_ID,
+} from '../colorSchemes';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { KEYBINDING_META, type KeybindingAction, type KeybindingsConfig } from '../types/keybindings';
 import { CategoryGroup } from '../types';
@@ -71,9 +78,18 @@ function findDuplicate(action: KeybindingAction, key: string, all: KeybindingsCo
   return null;
 }
 
+const DEFAULT_AUTO_SWITCH: AutoSwitchSettings = {
+  enabled: false,
+  lightSchemeId: DEFAULT_LIGHT_SCHEME_ID,
+  darkSchemeId: DEFAULT_DARK_SCHEME_ID,
+  dayStartHour: 7,
+  nightStartHour: 19,
+};
+
 export default function SettingsModal({ open, onClose, showNotification }: Props) {
   const [apiKey, setApiKey] = useState('');
-  const [colorScheme, setColorScheme] = useState('default-dark');
+  const [colorScheme, setColorScheme] = useState(DEFAULT_SCHEME_ID);
+  const [autoSwitch, setAutoSwitch] = useState<AutoSwitchSettings>(DEFAULT_AUTO_SWITCH);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.82);
   const [cardFontSize, setCardFontSize] = useState<number>(1);
   const [favoriteCategories, setFavoriteCategories] = useState<string[]>([]);
@@ -96,6 +112,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
       api.getSettings().then(settings => {
         setApiKey(settings.claudeApiKey);
         setColorScheme(settings.colorScheme);
+        setAutoSwitch(settings.autoSwitch);
         setSimilarityThreshold(settings.similarityThreshold);
         setCardFontSize(settings.cardFontSize);
         setFavoriteCategories(settings.favoriteCategories);
@@ -129,10 +146,26 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
 
   const handleSchemeChange = (schemeId: string) => {
     setColorScheme(schemeId);
+    if (autoSwitch.enabled) {
+      setAutoSwitch(prev => ({ ...prev, enabled: false }));
+    }
     const scheme = getSchemeById(schemeId);
     if (scheme) {
       applyColorScheme(scheme);
     }
+  };
+
+  const handleAutoSwitchToggle = () => {
+    setAutoSwitch(prev => {
+      const next = { ...prev, enabled: !prev.enabled };
+      if (next.enabled) {
+        const id = api.getSchemeForCurrentTime(next);
+        setColorScheme(id);
+        const scheme = getSchemeById(id);
+        if (scheme) applyColorScheme(scheme);
+      }
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -143,6 +176,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
         similarityThreshold,
         cardFontSize,
         favoriteCategories,
+        autoSwitch,
       });
       api.applyCardFontSize(cardFontSize);
       showNotification('Settings saved');
@@ -160,7 +194,10 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
   const handleCancel = () => {
     // Revert color scheme and font size to saved values
     const visualPrefs = api.getVisualPrefsSync();
-    const scheme = getSchemeById(visualPrefs.colorScheme);
+    const restoredId = visualPrefs.autoSwitch.enabled
+      ? api.getSchemeForCurrentTime(visualPrefs.autoSwitch)
+      : visualPrefs.colorScheme;
+    const scheme = getSchemeById(restoredId);
     if (scheme) {
       applyColorScheme(scheme);
     }
@@ -199,6 +236,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
         similarityThreshold,
         cardFontSize,
         favoriteCategories,
+        autoSwitch,
       });
       showNotification('API key removed');
     } catch {
@@ -271,7 +309,7 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
                 {COLOR_SCHEMES.map(scheme => (
                   <button
                     key={scheme.id}
-                    className={`scheme-card ${colorScheme === scheme.id ? 'active' : ''}`}
+                    className={`scheme-card ${!autoSwitch.enabled && colorScheme === scheme.id ? 'active' : ''}`}
                     onClick={() => handleSchemeChange(scheme.id)}
                   >
                     <div className="scheme-preview">
@@ -305,9 +343,27 @@ export default function SettingsModal({ open, onClose, showNotification }: Props
                       </div>
                     </div>
                     <span className="scheme-name">{scheme.name}</span>
-                    <span className="scheme-type">{scheme.type}</span>
                   </button>
                 ))}
+              </div>
+
+              <div className="auto-switch-row">
+                <div className="auto-switch-info">
+                  <span className="auto-switch-label">Auto switch</span>
+                  <span className="auto-switch-desc">
+                    Light theme by day ({autoSwitch.dayStartHour}:00), dark by night ({autoSwitch.nightStartHour}:00)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={`toggle-switch ${autoSwitch.enabled ? 'on' : ''}`}
+                  onClick={handleAutoSwitchToggle}
+                  role="switch"
+                  aria-checked={autoSwitch.enabled}
+                  aria-label="Auto theme switching"
+                >
+                  <span className="toggle-switch-thumb" />
+                </button>
               </div>
             </div>
 

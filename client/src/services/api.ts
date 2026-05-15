@@ -1,4 +1,10 @@
 import { ArxivPaper, SavedPaper, Comment, CommentWithPaper, Tag, CategoryGroup, FavoriteAuthor, ChatMessage, ChatSession, WorldlineChatSession, Worldline, PaperSimilarityResult } from '../types';
+import {
+  coerceSchemeId,
+  DEFAULT_SCHEME_ID,
+  DEFAULT_LIGHT_SCHEME_ID,
+  DEFAULT_DARK_SCHEME_ID,
+} from '../colorSchemes';
 
 const BASE = '/api';
 
@@ -550,9 +556,17 @@ export async function checkWorldlineSimilarity(
 }
 
 // Settings
-// Server-side: claudeApiKey, similarityThreshold
-// Client-side (localStorage): colorScheme, cardFontSize (visual preferences)
+// Server-side: claudeApiKey, similarityThreshold, favoriteCategories
+// Client-side (localStorage): colorScheme, cardFontSize, autoSwitch (visual preferences)
 const VISUAL_PREFS_KEY = 'navigate-visual-prefs';
+
+export interface AutoSwitchSettings {
+  enabled: boolean;
+  lightSchemeId: string;
+  darkSchemeId: string;
+  dayStartHour: number;
+  nightStartHour: number;
+}
 
 export interface AppSettings {
   claudeApiKey: string;
@@ -560,16 +574,26 @@ export interface AppSettings {
   similarityThreshold: number;
   cardFontSize: number;
   favoriteCategories: string[];
+  autoSwitch: AutoSwitchSettings;
 }
 
 export const MAX_FAVORITE_CATEGORIES = 5;
 
+const DEFAULT_AUTO_SWITCH: AutoSwitchSettings = {
+  enabled: false,
+  lightSchemeId: DEFAULT_LIGHT_SCHEME_ID,
+  darkSchemeId: DEFAULT_DARK_SCHEME_ID,
+  dayStartHour: 7,
+  nightStartHour: 19,
+};
+
 const DEFAULT_SETTINGS: AppSettings = {
   claudeApiKey: '',
-  colorScheme: 'default-dark',
+  colorScheme: DEFAULT_SCHEME_ID,
   similarityThreshold: 0.82,
   cardFontSize: 1,
   favoriteCategories: [],
+  autoSwitch: DEFAULT_AUTO_SWITCH,
 };
 
 function parseFavoriteCategories(raw: string | undefined): string[] {
@@ -584,6 +608,18 @@ function parseFavoriteCategories(raw: string | undefined): string[] {
 interface VisualPrefs {
   colorScheme: string;
   cardFontSize: number;
+  autoSwitch: AutoSwitchSettings;
+}
+
+function normalizeAutoSwitch(raw: any): AutoSwitchSettings {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_AUTO_SWITCH };
+  return {
+    enabled: !!raw.enabled,
+    lightSchemeId: coerceSchemeId(raw.lightSchemeId, DEFAULT_LIGHT_SCHEME_ID),
+    darkSchemeId: coerceSchemeId(raw.darkSchemeId, DEFAULT_DARK_SCHEME_ID),
+    dayStartHour: Number.isFinite(raw.dayStartHour) ? raw.dayStartHour : DEFAULT_AUTO_SWITCH.dayStartHour,
+    nightStartHour: Number.isFinite(raw.nightStartHour) ? raw.nightStartHour : DEFAULT_AUTO_SWITCH.nightStartHour,
+  };
 }
 
 function getVisualPrefs(): VisualPrefs {
@@ -591,19 +627,32 @@ function getVisualPrefs(): VisualPrefs {
     const stored = localStorage.getItem(VISUAL_PREFS_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Migrate old string values to numeric
       if (typeof parsed.cardFontSize === 'string') {
         const migration: Record<string, number> = { small: 0.85, medium: 1, large: 1.2 };
         parsed.cardFontSize = migration[parsed.cardFontSize] ?? 1;
       }
-      return { colorScheme: 'default-dark', cardFontSize: 1, ...parsed };
+      return {
+        colorScheme: coerceSchemeId(parsed.colorScheme, DEFAULT_SCHEME_ID),
+        cardFontSize: typeof parsed.cardFontSize === 'number' ? parsed.cardFontSize : 1,
+        autoSwitch: normalizeAutoSwitch(parsed.autoSwitch),
+      };
     }
   } catch {}
-  return { colorScheme: 'default-dark', cardFontSize: 1 };
+  return { colorScheme: DEFAULT_SCHEME_ID, cardFontSize: 1, autoSwitch: { ...DEFAULT_AUTO_SWITCH } };
 }
 
 function saveVisualPrefs(prefs: VisualPrefs): void {
   localStorage.setItem(VISUAL_PREFS_KEY, JSON.stringify(prefs));
+}
+
+export function getSchemeForCurrentTime(settings: AutoSwitchSettings, now: Date = new Date()): string {
+  const hour = now.getHours();
+  const { dayStartHour, nightStartHour } = settings;
+  if (dayStartHour <= nightStartHour) {
+    return hour >= dayStartHour && hour < nightStartHour ? settings.lightSchemeId : settings.darkSchemeId;
+  }
+  // Wrap-around (e.g. day=22, night=6) — uncommon but handle gracefully.
+  return hour >= dayStartHour || hour < nightStartHour ? settings.lightSchemeId : settings.darkSchemeId;
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -618,6 +667,7 @@ export async function getSettings(): Promise<AppSettings> {
       favoriteCategories: parseFavoriteCategories(serverSettings.favoriteCategories),
       colorScheme: visualPrefs.colorScheme,
       cardFontSize: visualPrefs.cardFontSize,
+      autoSwitch: visualPrefs.autoSwitch,
     };
   } catch {
     return { ...DEFAULT_SETTINGS, ...visualPrefs };
@@ -625,9 +675,11 @@ export async function getSettings(): Promise<AppSettings> {
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  // Save visual prefs to localStorage
-  saveVisualPrefs({ colorScheme: settings.colorScheme, cardFontSize: settings.cardFontSize });
-  // Save data settings to server
+  saveVisualPrefs({
+    colorScheme: settings.colorScheme,
+    cardFontSize: settings.cardFontSize,
+    autoSwitch: settings.autoSwitch,
+  });
   await request('/settings', {
     method: 'PUT',
     body: JSON.stringify({

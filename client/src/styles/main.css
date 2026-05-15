@@ -2514,8 +2514,9 @@ input[type="color"] {
    ======================== */
 .scheme-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  gap: 12px;
+  justify-content: center;
 }
 
 .scheme-card {
@@ -2605,11 +2606,66 @@ input[type="color"] {
   line-height: 1.2;
 }
 
-.scheme-type {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+.auto-switch-row {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.auto-switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auto-switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.auto-switch-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--border-color);
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background var(--transition);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toggle-switch.on {
+  background: var(--accent);
+}
+
+.toggle-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform var(--transition);
+}
+
+.toggle-switch.on .toggle-switch-thumb {
+  transform: translateX(18px);
 }
 
 /* ========================
@@ -4625,7 +4681,7 @@ input[type="color"] {
   }
 
   .scheme-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 160px));
   }
 
   .settings-key-row {

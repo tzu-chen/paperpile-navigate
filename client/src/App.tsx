@@ -67,11 +67,25 @@ export default function App() {
   useEffect(() => {
     // Visual prefs are stored locally for instant theme application
     const visualPrefs = api.getVisualPrefsSync();
-    const scheme = getSchemeById(visualPrefs.colorScheme);
+    const targetSchemeId = visualPrefs.autoSwitch.enabled
+      ? api.getSchemeForCurrentTime(visualPrefs.autoSwitch)
+      : visualPrefs.colorScheme;
+    const scheme = getSchemeById(targetSchemeId);
     if (scheme) {
       applyColorScheme(scheme);
     }
     api.applyCardFontSize(visualPrefs.cardFontSize);
+
+    // Re-check every minute so auto-switch transitions cleanly across the day/night boundary.
+    // The interval also auto-recovers if the user toggles auto-switch on without an app reload.
+    const interval = setInterval(() => {
+      const prefs = api.getVisualPrefsSync();
+      if (!prefs.autoSwitch.enabled) return;
+      const id = api.getSchemeForCurrentTime(prefs.autoSwitch);
+      const next = getSchemeById(id);
+      if (next) applyColorScheme(next);
+    }, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const favoriteAuthorNames = new Set(favoriteAuthors.map(a => a.name));
