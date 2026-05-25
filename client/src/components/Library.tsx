@@ -3,7 +3,6 @@ import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 import ImportPanel from './ImportPanel';
-import Icon from './Icon';
 
 interface Props {
   papers: SavedPaper[];
@@ -63,7 +62,14 @@ const TIER_RUBRIC: { tier: string; name: string; body: string }[] = [
 ];
 
 type TierFilter = number | 'ungraded' | null;
-type SortMode = 'viewed' | 'added';
+type SortMode = 'viewed-desc' | 'viewed-asc' | 'added-desc' | 'added-asc';
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'viewed-desc', label: 'Recently viewed' },
+  { value: 'viewed-asc', label: 'Least recently viewed' },
+  { value: 'added-desc', label: 'Recently added' },
+  { value: 'added-asc', label: 'Least recently added' },
+];
 
 export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor }: Props) {
   const [filterTag, setFilterTag] = useState<number | null>(null);
@@ -71,7 +77,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [filterTier, setFilterTier] = useState<TierFilter>(null);
   const [showTierRubric, setShowTierRubric] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('viewed');
+  const [sortMode, setSortMode] = useState<SortMode>('viewed-desc');
   const [newTagName, setNewTagName] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
   const [taggedPaperIds, setTaggedPaperIds] = useState<Set<number> | null>(null);
@@ -165,16 +171,12 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     })
     .slice()
     .sort((a, b) => {
-      if (sortMode === 'viewed') {
-        // Nulls (never viewed) sort to the bottom, then fall back to added_at desc.
-        const av = a.last_viewed_at;
-        const bv = b.last_viewed_at;
-        if (av && bv) return bv.localeCompare(av);
-        if (av) return -1;
-        if (bv) return 1;
-        return (b.added_at || '').localeCompare(a.added_at || '');
-      }
-      return (b.added_at || '').localeCompare(a.added_at || '');
+      const desc = sortMode.endsWith('-desc');
+      // Empty string for missing last_viewed_at sorts before any ISO timestamp
+      // — i.e. treated as infinitely in the past.
+      const av = (sortMode.startsWith('viewed') ? a.last_viewed_at : a.added_at) || '';
+      const bv = (sortMode.startsWith('viewed') ? b.last_viewed_at : b.added_at) || '';
+      return desc ? bv.localeCompare(av) : av.localeCompare(bv);
     });
 
   // Selection helpers
@@ -637,15 +639,17 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         <div className="library-controls">
           <div className="control-row">
             <div className="control-group search-group">
-              <button
-                type="button"
-                className="sort-toggle-icon"
-                onClick={() => setSortMode(sortMode === 'viewed' ? 'added' : 'viewed')}
-                title={sortMode === 'viewed' ? 'Sort: last viewed (click to switch to last added)' : 'Sort: last added (click to switch to last viewed)'}
-                aria-label={`Sort by ${sortMode === 'viewed' ? 'last viewed' : 'last added'}`}
+              <select
+                className="sort-select"
+                value={sortMode}
+                onChange={e => setSortMode(e.target.value as SortMode)}
+                aria-label="Sort order"
+                title="Sort order"
               >
-                <Icon name={sortMode === 'viewed' ? 'eye' : 'plus'} size="14px" />
-              </button>
+                {SORT_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
               <input
                 type="text"
                 placeholder="Filter papers by title or author..."
@@ -808,9 +812,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                       ))}
                       {authors.length > 3 && ` +${authors.length - 3} more`}
                     </span>
-                    <span className="paper-date">
-                      Added {new Date(paper.added_at).toLocaleDateString()}
-                    </span>
                     {(tagsByPaper[paper.id]?.length ?? 0) > 0 && (
                       <span className="paper-tag-chips">
                         {tagsByPaper[paper.id]
@@ -839,6 +840,15 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                           ))}
                       </span>
                     )}
+                    <span className="paper-dates">
+                      <span title="Last viewed">
+                        {paper.last_viewed_at ? new Date(paper.last_viewed_at).toLocaleDateString() : '—'}
+                      </span>
+                      <span className="paper-dates-sep" aria-hidden="true" />
+                      <span title="Added">
+                        {new Date(paper.added_at).toLocaleDateString()}
+                      </span>
+                    </span>
                   </div>
                   </div>
                 </div>
