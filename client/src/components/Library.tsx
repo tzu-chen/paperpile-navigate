@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
-import BatchImportPanel from './BatchImportPanel';
+import ImportPanel from './ImportPanel';
 
 interface Props {
   papers: SavedPaper[];
@@ -14,20 +14,6 @@ interface Props {
   onFavoriteAuthor: (name: string) => void;
   onSearchAuthor: (name: string) => void;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  new: 'New',
-  reading: 'Reading',
-  reviewed: 'Reviewed',
-  exported: 'Exported',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  new: '#6366f1',
-  reading: '#f59e0b',
-  reviewed: '#10b981',
-  exported: '#8b5cf6',
-};
 
 const TIER_LABELS: Record<number, string> = {
   0: 'T0',
@@ -68,10 +54,8 @@ const TIER_RUBRIC: { tier: string; name: string; body: string }[] = [
 type TierFilter = number | 'ungraded' | null;
 
 export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor }: Props) {
-  const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
   const [filterWorldline, setFilterWorldline] = useState<number | null>(null);
-  const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterTier, setFilterTier] = useState<TierFilter>(null);
   const [showTierRubric, setShowTierRubric] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,21 +74,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [worldlinePaperIds, setWorldlinePaperIds] = useState<Set<number> | null>(null);
   const [filterWorldlines, setFilterWorldlines] = useState<Worldline[]>([]);
 
-  // Batch import state
-  const [showBatchImport, setShowBatchImport] = useState(false);
+  // Import panel state
+  const [showImport, setShowImport] = useState(false);
 
-  // BibTeX import state
-  const [showBibtexImport, setShowBibtexImport] = useState(false);
-  const [bibtexText, setBibtexText] = useState('');
-  const [bibtexImporting, setBibtexImporting] = useState(false);
-
-  // PDF upload state
-  const [showPdfUpload, setShowPdfUpload] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadAuthors, setUploadAuthors] = useState('');
-  const [uploadSummary, setUploadSummary] = useState('');
-  const [uploading, setUploading] = useState(false);
+  // Export choice state (revealed after clicking Export with selection)
+  const [showExportChoice, setShowExportChoice] = useState(false);
 
   // Bulk selection state
   const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
@@ -149,47 +123,17 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   useEffect(() => {
     setSelectedPaperIds(new Set());
     setSelectMode(false);
-  }, [filterStatus, filterTag, filterWorldline, filterCategory, filterTier, searchTerm]);
-
-  // Compute unique categories from all papers for the filter dropdown
-  const availableCategories = useMemo(() => {
-    const catSet = new Set<string>();
-    for (const p of papers) {
-      try {
-        const cats = JSON.parse(p.categories) as string[];
-        for (const c of cats) catSet.add(c);
-      } catch { /* ignore */ }
-    }
-    return Array.from(catSet).sort();
-  }, [papers]);
-
-  // Group categories by prefix for the dropdown
-  const groupedCategories = useMemo(() => {
-    const groups: Record<string, string[]> = {};
-    for (const cat of availableCategories) {
-      const prefix = cat.includes('.') ? cat.split('.')[0] : cat;
-      if (!groups[prefix]) groups[prefix] = [];
-      groups[prefix].push(cat);
-    }
-    return groups;
-  }, [availableCategories]);
+  }, [filterTag, filterWorldline, filterTier, searchTerm]);
 
   const filteredPapers = papers.filter(p => {
     if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
     if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
-    if (filterStatus && p.status !== filterStatus) return false;
     if (filterTier !== null) {
       if (filterTier === 'ungraded') {
         if (p.tier !== null && p.tier !== undefined) return false;
       } else if (p.tier !== filterTier) {
         return false;
       }
-    }
-    if (filterCategory) {
-      try {
-        const cats = JSON.parse(p.categories) as string[];
-        if (!cats.includes(filterCategory)) return false;
-      } catch { return false; }
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -238,15 +182,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
       toggleSelection(paper.id);
     } else {
       onOpenPaper(paper);
-    }
-  }
-
-  async function handleStatusChange(paper: SavedPaper, status: string) {
-    try {
-      await api.updatePaperStatus(paper.id, status);
-      await onRefresh();
-    } catch {
-      showNotification('Failed to update status');
     }
   }
 
@@ -356,10 +291,32 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     setEditTagColor('');
   }
 
-  function handleExportAll() {
-    const ids = filteredPapers.map(p => p.id);
+  function handleExportSelectedBibtex() {
+    if (selectedPaperIds.size === 0) return;
+    const ids = Array.from(selectedPaperIds);
     window.open(api.getBibtexUrl(undefined, true, ids), '_blank');
+    setShowExportChoice(false);
   }
+
+  function handleExportSelectedPdfs() {
+    if (selectedPaperIds.size === 0) return;
+    const ids = Array.from(selectedPaperIds);
+    window.open(api.getPdfZipUrl(ids), '_blank');
+    setShowExportChoice(false);
+  }
+
+  function handleExportClick() {
+    if (selectedPaperIds.size === 0) {
+      showNotification('Select papers to export first');
+      return;
+    }
+    setShowExportChoice(prev => !prev);
+  }
+
+  // Hide the export choice if selection becomes empty or select mode is exited
+  useEffect(() => {
+    if (selectedPaperIds.size === 0) setShowExportChoice(false);
+  }, [selectedPaperIds]);
 
   // Bulk operation handlers
   async function handleBulkDownloadPdfs() {
@@ -431,22 +388,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     }
   }
 
-  async function handleBulkStatusChange(status: string) {
-    setBulkLoading(true);
-    setBulkAction('Updating status');
-    try {
-      const result = await api.bulkUpdateStatus(Array.from(selectedPaperIds), status);
-      showNotification(`Updated status for ${result.updated} paper(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to update status');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
   async function handleBulkAddTag(tagId: number) {
     setBulkLoading(true);
     setBulkAction('Adding tag');
@@ -479,77 +420,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     }
   }
 
-  async function handleBibtexImport() {
-    if (!bibtexText.trim()) {
-      showNotification('Paste or load a BibTeX file first');
-      return;
-    }
-    setBibtexImporting(true);
-    try {
-      const result = await api.importBibtex(bibtexText);
-      const parts: string[] = [];
-      parts.push(`${result.papers_added} added`);
-      if (result.papers_skipped > 0) parts.push(`${result.papers_skipped} already in library`);
-      if (result.tags_applied > 0) parts.push(`${result.tags_applied} tag assignments`);
-      if (result.comments_added > 0) parts.push(`${result.comments_added} comments restored`);
-      if (result.errors.length > 0) parts.push(`${result.errors.length} errors`);
-      showNotification(`BibTeX import: ${parts.join(', ')}`);
-      if (result.errors.length > 0) {
-        console.warn('BibTeX import errors:', result.errors);
-      }
-      setBibtexText('');
-      setShowBibtexImport(false);
-      await onRefresh();
-    } catch (err: any) {
-      showNotification(err.message || 'BibTeX import failed');
-    } finally {
-      setBibtexImporting(false);
-    }
-  }
-
-  function handleBibtexFileLoad(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setBibtexText(reader.result as string);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  }
-
-  async function handlePdfUpload() {
-    if (!uploadFile || !uploadTitle.trim()) {
-      showNotification('PDF file and title are required');
-      return;
-    }
-    const authors = uploadAuthors.split(',').map(a => a.trim()).filter(a => a.length > 0);
-    if (authors.length === 0) {
-      showNotification('At least one author is required');
-      return;
-    }
-    setUploading(true);
-    try {
-      await api.uploadPaper(uploadFile, {
-        title: uploadTitle.trim(),
-        authors,
-        summary: uploadSummary.trim() || undefined,
-      });
-      showNotification('Paper uploaded successfully');
-      setUploadFile(null);
-      setUploadTitle('');
-      setUploadAuthors('');
-      setUploadSummary('');
-      setShowPdfUpload(false);
-      await onRefresh();
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to upload paper');
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || filterCategory !== '' || filterTier !== null || searchTerm !== '';
 
 
   return (
@@ -719,36 +589,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             </div>
 
             <div className="control-group">
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-              >
-                <option value="">All Statuses</option>
-                {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </div>
-
-            {availableCategories.length > 0 && (
-              <div className="control-group">
-                <select
-                  value={filterCategory}
-                  onChange={e => setFilterCategory(e.target.value)}
-                >
-                  <option value="">All Categories</option>
-                  {Object.entries(groupedCategories).map(([prefix, cats]) => (
-                    <optgroup key={prefix} label={prefix}>
-                      {cats.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="control-group">
               <button
                 className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={toggleSelectMode}
@@ -769,139 +609,48 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             <div className={`library-action-buttons ${showMobileActions ? 'expanded' : ''}`}>
               <div className="control-group">
                 <button
-                  className={`btn btn-sm ${showBatchImport ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setShowBatchImport(!showBatchImport)}
+                  className={`btn btn-sm ${showImport ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setShowImport(!showImport)}
                 >
-                  Batch Import
+                  Import
                 </button>
               </div>
 
-              <div className="control-group">
+              <div className="control-group export-group">
                 <button
-                  className={`btn btn-sm ${showBibtexImport ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setShowBibtexImport(!showBibtexImport)}
+                  className={`btn btn-sm ${showExportChoice ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={handleExportClick}
+                  title={selectedPaperIds.size === 0 ? 'Select papers first' : `Export ${selectedPaperIds.size} selected`}
                 >
-                  Import BibTeX
+                  Export{selectedPaperIds.size > 0 ? ` (${selectedPaperIds.size})` : ''}
                 </button>
-              </div>
-
-              <div className="control-group">
-                <button
-                  className={`btn btn-sm ${showPdfUpload ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setShowPdfUpload(!showPdfUpload)}
-                >
-                  Upload PDF
-                </button>
-              </div>
-
-              <div className="control-group">
-                <button className="btn btn-primary btn-sm" onClick={handleExportAll}>
-                  {hasActiveFilters ? `Export ${filteredPapers.length} (BibTeX)` : 'Export All (BibTeX)'}
-                </button>
+                {showExportChoice && selectedPaperIds.size > 0 && (
+                  <>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleExportSelectedBibtex}
+                    >
+                      BibTeX
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleExportSelectedPdfs}
+                    >
+                      PDFs
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {showBatchImport && (
-          <BatchImportPanel
+        {showImport && (
+          <ImportPanel
             tags={tags}
             showNotification={showNotification}
             onImportComplete={onRefresh}
           />
-        )}
-
-        {showBibtexImport && (
-          <div className="batch-import-section">
-            <h3>Import BibTeX</h3>
-            <p className="batch-import-hint">
-              Paste BibTeX entries below or load a .bib file. Papers with ArXiv eprint fields will be imported into your library with their tags and comments preserved.
-            </p>
-            <div className="batch-import-body">
-              <div className="batch-import-left" style={{ flex: 1 }}>
-                <textarea
-                  className="batch-import-textarea"
-                  placeholder={"@article{key,\n  author = {Author Name},\n  title = {Paper Title},\n  eprint = {2301.00001},\n  ...\n}"}
-                  value={bibtexText}
-                  onChange={e => setBibtexText(e.target.value)}
-                  rows={8}
-                  disabled={bibtexImporting}
-                />
-              </div>
-              <div className="batch-import-right">
-                <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
-                  Load .bib File
-                  <input
-                    type="file"
-                    accept=".bib,.bibtex,text/plain"
-                    onChange={handleBibtexFileLoad}
-                    style={{ display: 'none' }}
-                    disabled={bibtexImporting}
-                  />
-                </label>
-                <button
-                  className="btn btn-primary batch-import-submit"
-                  onClick={handleBibtexImport}
-                  disabled={bibtexImporting || !bibtexText.trim()}
-                >
-                  {bibtexImporting ? 'Importing...' : 'Import'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showPdfUpload && (
-          <div className="batch-import-section">
-            <h3>Upload PDF</h3>
-            <p className="batch-import-hint">
-              Upload a PDF file as an external reference. It will be added to your library and can be tagged, commented on, added to worldlines, and chatted about.
-            </p>
-            <div className="batch-import-body" style={{ flexDirection: 'column', gap: '0.5rem' }}>
-              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-block', alignSelf: 'flex-start' }}>
-                {uploadFile ? uploadFile.name : 'Choose PDF File'}
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={e => setUploadFile(e.target.files?.[0] || null)}
-                  style={{ display: 'none' }}
-                  disabled={uploading}
-                />
-              </label>
-              <input
-                type="text"
-                placeholder="Title (required)"
-                value={uploadTitle}
-                onChange={e => setUploadTitle(e.target.value)}
-                disabled={uploading}
-                style={{ width: '100%' }}
-              />
-              <input
-                type="text"
-                placeholder="Authors (comma-separated, required)"
-                value={uploadAuthors}
-                onChange={e => setUploadAuthors(e.target.value)}
-                disabled={uploading}
-                style={{ width: '100%' }}
-              />
-              <textarea
-                placeholder="Abstract / summary (optional)"
-                value={uploadSummary}
-                onChange={e => setUploadSummary(e.target.value)}
-                rows={3}
-                disabled={uploading}
-                style={{ width: '100%' }}
-              />
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handlePdfUpload}
-                disabled={uploading || !uploadFile || !uploadTitle.trim() || !uploadAuthors.trim()}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                {uploading ? 'Uploading...' : 'Upload'}
-              </button>
-            </div>
-          </div>
         )}
 
         {/* Bulk operations toolbar */}
@@ -921,16 +670,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             <button className="btn btn-secondary btn-sm" onClick={handleBulkDeletePdfs} disabled={bulkLoading}>
               Delete PDFs
             </button>
-            <select
-              onChange={e => { if (e.target.value) handleBulkStatusChange(e.target.value); e.target.value = ''; }}
-              defaultValue=""
-              disabled={bulkLoading}
-            >
-              <option value="">Set Status...</option>
-              {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
             <select
               onChange={e => {
                 if (e.target.value === '') return;
@@ -989,7 +728,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
           <div className="paper-list">
             {filteredPapers.map(paper => {
               const authors = JSON.parse(paper.authors) as string[];
-              const categories = JSON.parse(paper.categories) as string[];
 
               const tierValue = paper.tier ?? null;
               const tierClass = tierValue !== null ? ` tier-${tierValue}` : ' tier-ungraded';
@@ -1034,19 +772,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                         <LaTeX>{paper.title}</LaTeX>
                       </h3>
                     </div>
-                    <div className="paper-actions">
-                      <select
-                        value={paper.status}
-                        onChange={e => handleStatusChange(paper, e.target.value)}
-                        className="status-select"
-                        style={{ borderColor: STATUS_COLORS[paper.status] }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
 
                   <div className="paper-meta">
@@ -1069,19 +794,9 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                     <span className="paper-date">
                       Added {new Date(paper.added_at).toLocaleDateString()}
                     </span>
-                    <span className="paper-categories">
-                      {paper.arxiv_id.startsWith('upload-') ? (
-                        <span className="category-badge" style={{ backgroundColor: '#8b5cf6' }}>Uploaded</span>
-                      ) : categories.slice(0, 3).map(c => (
-                        <span key={c} className={`category-badge cat-${c.includes('.') ? c.split('.')[0] : c}`}>{c}</span>
-                      ))}
-                    </span>
-                    <span
-                      className="status-badge"
-                      style={{ backgroundColor: STATUS_COLORS[paper.status] }}
-                    >
-                      {STATUS_LABELS[paper.status]}
-                    </span>
+                    {paper.arxiv_id.startsWith('upload-') && (
+                      <span className="category-badge" style={{ backgroundColor: '#8b5cf6' }}>Uploaded</span>
+                    )}
                     <span className={`pdf-badge ${paper.pdf_path ? 'pdf-badge-local' : 'pdf-badge-none'}`}>
                       {paper.pdf_path ? 'PDF' : 'No PDF'}
                     </span>

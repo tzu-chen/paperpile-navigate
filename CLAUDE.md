@@ -50,9 +50,10 @@ paperpile-navigate/
 ### Client (`client/src/`)
 
 * **App.tsx** — Root component managing 6 view modes: `browse`, `library`, `authors`, `viewer`, `chatHistory`, `worldline`. Holds global state for papers, tags, and favorite authors. Initializes color scheme and font size from localStorage on mount.
-* **components/** — 17 components:
+* **components/** — 18 components:
   + `PaperBrowser` — Search/browse with category filters, query, pagination
-  + `Library` — Saved papers list with status/tag filters, multi-select bulk operations
+  + `Library` — Saved papers list with tag/worldline/tier filters, multi-select bulk operations, unified import panel, and selection-driven export
+  + `ImportPanel` — Tabbed panel combining ArXiv ID batch import, BibTeX import, and PDF upload
   + `PaperViewer` — Main reader: PDFViewer on left, tabbed sidebar (chat, comments, tags, export, info, worldline, import) on right. Supports immersive mode and browse-context navigation.
   + `PDFViewer` — react-pdf integration with page controls, search, annotations
   + `ChatPanel` — Conversation UI with markdown rendering and token usage display
@@ -77,11 +78,11 @@ paperpile-navigate/
 * **index.ts** — Express entry point. CORS enabled, JSON body parser (10MB limit). Mounts 8 route modules under `/api`. Serves static client build from `client/dist/` in production with SPA fallback. Initializes database and PDF storage on startup.
 * **routes/** — RESTful route handlers:
   + `arxiv.ts` — Search, categories, latest/recent papers, single paper fetch, PDF proxy (avoids CORS)
-  + `papers.ts` — Full CRUD for saved papers + bulk operations (download-pdfs, delete-pdfs, delete, status, add-tag, remove-tag) + sub-routes for comments and tags
+  + `papers.ts` — Full CRUD for saved papers + bulk operations (download-pdfs, delete-pdfs, delete, tier, add-tag, remove-tag) + sub-routes for comments and tags
   + `tags.ts` — Tag CRUD (name is UNIQUE)
   + `chat.ts` — Claude AI proxy. Fetches PDF (cached 30min in memory), sends to Anthropic API with paper context and related worldline papers. Model: `claude-sonnet-4-20250514`, max_tokens: 2048. Also handles worldline-level chat (no PDF, titles + abstracts only) and API key verification.
   + `authors.ts` — Favorite authors + batch-fetches recent publications (concurrency limit: 3)
-  + `export.ts` — BibTeX and Paperpile JSON generation. Citation key format: `{LastName}{Year}{ArxivId}`. Embeds tags as keywords and comments as notes.
+  + `export.ts` — BibTeX and Paperpile JSON generation. Citation key format: `{LastName}{Year}{ArxivId}`. Embeds tags as keywords and comments as notes. Also streams a ZIP archive of selected local PDFs (`GET /api/export/pdfs?ids=`).
   + `worldlines.ts` — Worldline CRUD, paper assignment with position ordering, SPECTER embedding similarity scoring (see Similarity System below), batch import from ArXiv
   + `settings.ts` — Key-value settings CRUD (API key, similarity threshold, etc.)
 * **services/** — Business logic layer:
@@ -132,7 +133,7 @@ SQLite database created at runtime. 11 tables with cascade deletion:
 
 | Table | Key Columns | Constraints |
 | --- | --- | --- |
-| `papers` | id, arxiv_id, title, summary, authors, published, status, pdf_path | arxiv_id UNIQUE, status CHECK ('new','reading','reviewed','exported') |
+| `papers` | id, arxiv_id, title, summary, authors, published, pdf_path, tier | arxiv_id UNIQUE, tier CHECK (NULL OR 0–4) |
 | `comments` | id, paper_id, content, page_number | FK→papers CASCADE |
 | `tags` | id, name, color | name UNIQUE, color DEFAULT '#6366f1' |
 | `paper_tags` | paper_id, tag_id | Composite PK, both FK CASCADE |

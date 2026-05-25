@@ -28,7 +28,6 @@ export interface SavedPaper {
   doi: string | null;
   journal_ref: string | null;
   added_at: string;
-  status: 'new' | 'reading' | 'reviewed' | 'exported';
   pdf_path: string | null;
   tier: number | null;
 }

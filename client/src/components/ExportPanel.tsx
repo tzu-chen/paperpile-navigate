@@ -32,15 +32,6 @@ export default function ExportPanel({ paper, showNotification }: Props) {
     window.open(api.getBibtexUrl(paper.id, true), '_blank');
   }
 
-  async function handleMarkExported() {
-    try {
-      await api.markExported(paper.id);
-      showNotification('Paper marked as exported');
-    } catch {
-      showNotification('Failed to mark as exported');
-    }
-  }
-
   return (
     <div className="export-panel">
       <div className="export-section">
@@ -70,9 +61,6 @@ export default function ExportPanel({ paper, showNotification }: Props) {
           </button>
           <button className="btn btn-secondary btn-sm" onClick={handleDownloadBibtex}>
             Download .bib File
-          </button>
-          <button className="btn btn-success btn-sm" onClick={handleMarkExported}>
-            Mark as Exported
           </button>
         </div>
       </div>

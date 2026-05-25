@@ -29,8 +29,7 @@ export function initializeDatabase(): void {
       abs_url TEXT NOT NULL,
       doi TEXT,
       journal_ref TEXT,
-      added_at TEXT DEFAULT (datetime('now')),
-      status TEXT DEFAULT 'new' CHECK(status IN ('new', 'reading', 'reviewed', 'exported'))
+      added_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS comments (
@@ -141,6 +140,14 @@ export function initializeDatabase(): void {
   if (!columns.some(c => c.name === 'tier')) {
     db.exec("ALTER TABLE papers ADD COLUMN tier INTEGER CHECK(tier IS NULL OR (tier >= 0 AND tier <= 4))");
   }
+  // Migration: drop legacy status column (requires SQLite 3.35+)
+  if (columns.some(c => c.name === 'status')) {
+    try {
+      db.exec('ALTER TABLE papers DROP COLUMN status');
+    } catch (err) {
+      console.warn('Could not drop legacy `status` column from papers; leaving it in place:', err);
+    }
+  }
 }
 
 // Paper operations
@@ -170,7 +177,7 @@ export function savePaper(paper: {
   return stmt.run(paper);
 }
 
-export function getPapers(options?: { status?: string; tag_id?: number; tier?: number | 'ungraded' }) {
+export function getPapers(options?: { tag_id?: number; tier?: number | 'ungraded' }) {
   if (options?.tag_id) {
     return db.prepare(`
       SELECT p.* FROM papers p
@@ -178,9 +185,6 @@ export function getPapers(options?: { status?: string; tag_id?: number; tier?: n
       WHERE pt.tag_id = ?
       ORDER BY p.added_at DESC
     `).all(options.tag_id);
-  }
-  if (options?.status) {
-    return db.prepare('SELECT * FROM papers WHERE status = ? ORDER BY added_at DESC').all(options.status);
   }
   if (options?.tier === 'ungraded') {
     return db.prepare('SELECT * FROM papers WHERE tier IS NULL ORDER BY added_at DESC').all();
@@ -197,10 +201,6 @@ export function getPaper(id: number) {
 
 export function getPaperByArxivId(arxivId: string) {
   return db.prepare('SELECT * FROM papers WHERE arxiv_id = ?').get(arxivId);
-}
-
-export function updatePaperStatus(id: number, status: string) {
-  return db.prepare('UPDATE papers SET status = ? WHERE id = ?').run(status, id);
 }
 
 export function updatePaperTier(id: number, tier: number | null) {
@@ -451,12 +451,6 @@ export function getPapersByIds(paperIds: number[]) {
   if (paperIds.length === 0) return [];
   const placeholders = paperIds.map(() => '?').join(',');
   return db.prepare(`SELECT * FROM papers WHERE id IN (${placeholders})`).all(...paperIds);
-}
-
-export function bulkUpdateStatus(paperIds: number[], status: string) {
-  if (paperIds.length === 0) return { changes: 0 };
-  const placeholders = paperIds.map(() => '?').join(',');
-  return db.prepare(`UPDATE papers SET status = ? WHERE id IN (${placeholders})`).run(status, ...paperIds);
 }
 
 export function bulkDeletePapers(paperIds: number[]) {

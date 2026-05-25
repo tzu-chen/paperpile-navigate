@@ -17,7 +17,7 @@ function paramInt(val: string | string[]): number {
 // GET /api/papers - List all saved papers
 router.get('/', (req: Request, res: Response) => {
   try {
-    const { status, tag_id, tier } = req.query as Record<string, string>;
+    const { tag_id, tier } = req.query as Record<string, string>;
     let tierFilter: number | 'ungraded' | undefined;
     if (tier === 'ungraded') {
       tierFilter = 'ungraded';
@@ -26,7 +26,6 @@ router.get('/', (req: Request, res: Response) => {
       if (parsed >= 0 && parsed <= 4) tierFilter = parsed;
     }
     const papers = db.getPapers({
-      status,
       tag_id: tag_id ? parseInt(tag_id, 10) : undefined,
       tier: tierFilter,
     });
@@ -227,25 +226,6 @@ router.post('/bulk/delete', (req: Request, res: Response) => {
   }
 });
 
-// POST /api/papers/bulk/status
-router.post('/bulk/status', (req: Request, res: Response) => {
-  try {
-    const { paper_ids, status } = req.body as { paper_ids: number[]; status: string };
-    if (!paper_ids || !Array.isArray(paper_ids) || paper_ids.length === 0) {
-      return res.status(400).json({ error: 'paper_ids array is required' });
-    }
-    if (!['new', 'reading', 'reviewed', 'exported'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-
-    const result = db.bulkUpdateStatus(paper_ids, status);
-    res.json({ success: true, updated: result.changes });
-  } catch (error) {
-    console.error('Bulk update status error:', error);
-    res.status(500).json({ error: 'Failed to bulk update status' });
-  }
-});
-
 // POST /api/papers/bulk/tier
 router.post('/bulk/tier', (req: Request, res: Response) => {
   try {
@@ -379,21 +359,6 @@ router.patch('/:id/tier', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Update tier error:', error);
     res.status(500).json({ error: 'Failed to update tier' });
-  }
-});
-
-// PATCH /api/papers/:id/status - Update paper status
-router.patch('/:id/status', (req: Request, res: Response) => {
-  try {
-    const { status } = req.body;
-    if (!['new', 'reading', 'reviewed', 'exported'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-    db.updatePaperStatus(paramInt(req.params.id), status);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Update status error:', error);
-    res.status(500).json({ error: 'Failed to update status' });
   }
 });
 

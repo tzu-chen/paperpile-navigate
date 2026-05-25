@@ -70,12 +70,10 @@ export function getPdfProxyUrl(arxivId: string): string {
 
 // Papers (Library)
 export async function getSavedPapers(filters?: {
-  status?: string;
   tag_id?: number;
   tier?: number | 'ungraded';
 }): Promise<SavedPaper[]> {
   const qs = new URLSearchParams();
-  if (filters?.status) qs.set('status', filters.status);
   if (filters?.tag_id) qs.set('tag_id', String(filters.tag_id));
   if (filters?.tier !== undefined) qs.set('tier', String(filters.tier));
   const query = qs.toString();
@@ -123,13 +121,6 @@ export async function uploadPaper(
     throw new Error(err.error || 'Upload failed');
   }
   return res.json();
-}
-
-export async function updatePaperStatus(id: number, status: string): Promise<void> {
-  await request(`/papers/${id}/status`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status }),
-  });
 }
 
 export async function updatePaperTier(id: number, tier: number | null): Promise<void> {
@@ -204,16 +195,6 @@ export async function bulkDeletePapers(paperIds: number[]): Promise<{
   return request('/papers/bulk/delete', {
     method: 'POST',
     body: JSON.stringify({ paper_ids: paperIds }),
-  });
-}
-
-export async function bulkUpdateStatus(paperIds: number[], status: string): Promise<{
-  success: boolean;
-  updated: number;
-}> {
-  return request('/papers/bulk/status', {
-    method: 'POST',
-    body: JSON.stringify({ paper_ids: paperIds, status }),
   });
 }
 
@@ -340,8 +321,9 @@ export async function getBibtexText(paperId: number): Promise<string> {
   return res.text();
 }
 
-export async function markExported(paperId: number): Promise<void> {
-  await request(`/export/mark-exported/${paperId}`, { method: 'POST' });
+export function getPdfZipUrl(paperIds: number[]): string {
+  const params = new URLSearchParams({ ids: paperIds.join(',') });
+  return `${BASE}/export/pdfs?${params}`;
 }
 
 export async function importBibtex(bibtex: string): Promise<{

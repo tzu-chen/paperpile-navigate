@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import archiver from 'archiver';
 import * as db from '../services/database';
 import { generateBibtex, generateBibtexBundle, generatePaperpileMetadata, parseBibtex } from '../services/paperpile';
-import { downloadAndStorePdf } from '../services/pdf';
+import { downloadAndStorePdf, resolveDbPdfPath } from '../services/pdf';
 import { SavedPaper, Comment, Tag } from '../types';
 
 const router = Router();
@@ -69,6 +71,66 @@ router.get('/bibtex', (req: Request, res: Response) => {
   } catch (error) {
     console.error('BibTeX bundle export error:', error);
     res.status(500).json({ error: 'Failed to export BibTeX bundle' });
+  }
+});
+
+// GET /api/export/pdfs - Stream a ZIP archive of local PDFs for selected papers
+router.get('/pdfs', (req: Request, res: Response) => {
+  try {
+    if (!req.query.ids) {
+      return res.status(400).json({ error: 'ids query parameter is required' });
+    }
+    const ids = String(req.query.ids)
+      .split(',')
+      .map(s => parseInt(s, 10))
+      .filter(n => !isNaN(n));
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'At least one valid paper id is required' });
+    }
+
+    const papers = db.getPapersByIds(ids) as SavedPaper[];
+    const papersWithPdfs = papers.filter(p => p.pdf_path);
+
+    if (papersWithPdfs.length === 0) {
+      return res.status(404).json({ error: 'None of the selected papers have a local PDF' });
+    }
+
+    const usedNames = new Set<string>();
+    const archive = archiver('zip', { zlib: { level: 6 } });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="papers.zip"');
+
+    archive.on('warning', err => {
+      if (err.code !== 'ENOENT') console.warn('Archive warning:', err);
+    });
+    archive.on('error', err => {
+      console.error('Archive error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to build PDF archive' });
+      else res.end();
+    });
+
+    archive.pipe(res);
+
+    for (const paper of papersWithPdfs) {
+      const absPath = resolveDbPdfPath(paper.pdf_path as string);
+      if (!fs.existsSync(absPath)) continue;
+      const baseName = paper.arxiv_id.startsWith('upload-')
+        ? paper.title.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_').slice(0, 80) || `paper-${paper.id}`
+        : paper.arxiv_id.replace('/', '_');
+      let name = `${baseName}.pdf`;
+      let n = 1;
+      while (usedNames.has(name)) {
+        name = `${baseName}-${++n}.pdf`;
+      }
+      usedNames.add(name);
+      archive.file(absPath, { name });
+    }
+
+    archive.finalize();
+  } catch (error) {
+    console.error('PDF zip export error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to export PDFs' });
   }
 });
 
@@ -207,17 +269,6 @@ router.post('/import-bibtex', (req: Request, res: Response) => {
   } catch (error) {
     console.error('BibTeX import error:', error);
     res.status(500).json({ error: 'Failed to import BibTeX' });
-  }
-});
-
-// POST /api/export/mark-exported/:id - Mark a paper as exported
-router.post('/mark-exported/:id', (req: Request, res: Response) => {
-  try {
-    db.updatePaperStatus(paramInt(req.params.id), 'exported');
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Mark exported error:', error);
-    res.status(500).json({ error: 'Failed to mark as exported' });
   }
 });
 

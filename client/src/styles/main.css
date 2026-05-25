@@ -1150,6 +1150,48 @@ input[type="color"] {
   line-height: 1.4;
 }
 
+/* Unified Import Panel (tabs) */
+.import-panel {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.import-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.import-tab {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-bottom: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.import-tab:hover {
+  color: var(--text-primary);
+}
+
+.import-tab.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  border-bottom-color: var(--bg-secondary);
+}
+
+.import-tab-body .batch-import-section {
+  border-bottom: none;
+}
+
 /* Compact mode for sidebar panel */
 .batch-import-compact {
   padding: 12px;
