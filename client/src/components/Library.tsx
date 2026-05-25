@@ -257,12 +257,34 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         }
       } else if (e.key === 'Escape') {
         if (selectedPaperIds.size > 0) clearSelection();
+      } else if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (selectedPaperIds.size === 0) return;
+        e.preventDefault();
+        handleDeleteSelected();
       }
     }
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [filteredPapers, activePaperId, anchorPaperId, selectedPaperIds, papers, onOpenPaper]);
+
+  async function handleDeleteSelected() {
+    const count = selectedPaperIds.size;
+    if (count === 0) return;
+    const msg = count === 1
+      ? 'Delete 1 paper? This cannot be undone.'
+      : `Delete ${count} papers? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    try {
+      const ids = Array.from(selectedPaperIds);
+      const result = await api.bulkDeletePapers(ids);
+      clearSelection();
+      showNotification(`Deleted ${result.deleted} paper(s)`);
+      await onRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'Failed to delete papers');
+    }
+  }
 
   async function handleToggleCache(paper: SavedPaper) {
     if (paper.arxiv_id.startsWith('upload-')) return;
