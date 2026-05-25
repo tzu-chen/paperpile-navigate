@@ -4446,15 +4446,36 @@ input[type="color"] {
   background: transparent;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 2100;
   animation: fadeIn 0.12s ease;
 }
 
-.wl-nav-panel {
-  background: transparent;
+.wl-nav-carousel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  --wl-nav-dur: 360ms;
+  --wl-nav-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --wl-peek-scale: 0.4;
+  /* Peek center x: 100vw - 164px keeps the scaled card's right edge ~20px from
+     viewport right (half of scaled 720px width ≈ 144px). */
+  --wl-peek-offset: calc(50vw - 164px);
+  --wl-off-offset: calc(100vw + 200px);
+}
+
+.wl-nav-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.wl-nav-carousel-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 720px;
   max-width: 92vw;
   max-height: 84vh;
@@ -4462,12 +4483,81 @@ input[type="color"] {
   flex-direction: column;
   align-items: stretch;
   gap: 18px;
+  background: transparent;
+  will-change: transform, opacity;
+  transform: translate(-50%, -50%);
+  opacity: 0;
 }
 
-.wl-nav-loading {
-  color: var(--text-muted);
-  font-style: italic;
-  text-align: center;
+.wl-nav-carousel-item.slot-center {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  z-index: 2;
+}
+
+.wl-nav-carousel-item.slot-right {
+  transform: translate(calc(-50% + var(--wl-peek-offset)), -50%) scale(var(--wl-peek-scale));
+  opacity: 0.5;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wl-nav-carousel-item.slot-leaving-left {
+  animation: wl-leave-left var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes wl-leave-left {
+  from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  to { transform: translate(calc(-50% - var(--wl-off-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0; }
+}
+
+.wl-nav-carousel-item.slot-incoming-from-right {
+  animation: wl-enter-from-right var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 2;
+}
+@keyframes wl-enter-from-right {
+  from { transform: translate(calc(-50% + var(--wl-peek-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0.5; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+.wl-nav-carousel-item.slot-peek-incoming {
+  animation: wl-peek-from-right var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes wl-peek-from-right {
+  from { transform: translate(calc(-50% + var(--wl-off-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0; }
+  to { transform: translate(calc(-50% + var(--wl-peek-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0.5; }
+}
+
+.wl-nav-carousel-item.slot-incoming-from-left {
+  animation: wl-enter-from-left var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 2;
+}
+@keyframes wl-enter-from-left {
+  from { transform: translate(calc(-50% - var(--wl-off-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+.wl-nav-carousel-item.slot-moving-to-right {
+  animation: wl-move-to-right var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes wl-move-to-right {
+  from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  to { transform: translate(calc(-50% + var(--wl-peek-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0.5; }
+}
+
+.wl-nav-carousel-item.slot-leaving-right {
+  animation: wl-leave-right var(--wl-nav-dur) var(--wl-nav-ease) forwards;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes wl-leave-right {
+  from { transform: translate(calc(-50% + var(--wl-peek-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0.5; }
+  to { transform: translate(calc(-50% + var(--wl-off-offset)), -50%) scale(var(--wl-peek-scale)); opacity: 0; }
 }
 
 .wl-nav-title {
@@ -4480,6 +4570,12 @@ input[type="color"] {
 .wl-nav-list {
   overflow-y: auto;
   padding: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wl-nav-list::-webkit-scrollbar {
+  display: none;
 }
 
 .wl-nav-row {
