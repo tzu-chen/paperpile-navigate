@@ -47,12 +47,27 @@ interface Props {
   onDeleteComment?: (commentId: number) => void | Promise<void>;
 }
 
-// Detect mobile once — used to tune buffer sizes and canvas resolution
+// Detect mobile once — used to tune buffer sizes and canvas resolution.
+// iPadOS 13+ reports its UA as "Macintosh", and modern iPads in landscape
+// exceed 1024px, so neither UA sniffing nor a width threshold catches them
+// on their own. Touch-points + Mac platform is the reliable iPad signal.
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-  (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+  (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 
-// Cap canvas resolution at 2x for crisp text without excess memory use.
-const canvasPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+// Baseline canvas resolution — matches the screen's native pixel density so
+// rendering is sharp at the default viewport scale. Capped at 2 because going
+// higher costs memory quadratically without visible benefit on most screens.
+const baseCanvasPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+// Hard ceiling on the effective DPR we'll feed pdf.js, even under heavy pinch
+// zoom. Canvas memory grows with DPR², so 3 already costs ~9x the bytes of
+// DPR=1; beyond that we'd OOM on mobile and gain little perceptual sharpness.
+const MAX_CANVAS_PIXEL_RATIO = 3;
+
+// Above this PDF size, mobile browsers risk OOM-killing the tab during pdf.js
+// parsing — long before we can show any error. We prompt the user to open the
+// PDF in their OS's native viewer instead.
+const MOBILE_PDF_SIZE_LIMIT = 12 * 1024 * 1024;
 
 
 export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggleImmersive, jumpToPage, onJumpApplied, onTextSelected, onRequestAddComment, comments, onDeleteComment }: Props) {
@@ -72,6 +87,17 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     return localStorage.getItem('pdfDarkTheme') !== null;
   });
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set([1]));
+  // Mobile-only size guard. 'pending' blocks rendering until the HEAD probe
+  // returns; 'large' surfaces a confirmation UI before we hand a multi-hundred-
+  // megabyte PDF to pdf.js (which can OOM-kill the tab on iPad Safari).
+  const [sizeGate, setSizeGate] = useState<'ok' | 'pending' | 'large'>(
+    isMobile ? 'pending' : 'ok',
+  );
+  const [pdfByteSize, setPdfByteSize] = useState<number | null>(null);
+  // Visual-viewport (pinch) zoom level. Pinching scales the canvas pixels
+  // visually without re-rasterizing, so we track this and bump the rendered
+  // DPR to keep pages sharp at any zoom level.
+  const [pinchZoom, setPinchZoom] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const currentPageRef = useRef(1);
   // Browser-style back/forward history for in-PDF jumps (TOC clicks, internal
@@ -110,6 +136,33 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     setVisiblePages(new Set([1]));
     jumpHistoryRef.current = [];
     jumpIndexRef.current = -1;
+    setSizeGate(isMobile ? 'pending' : 'ok');
+    setPdfByteSize(null);
+  }, [pdfUrl]);
+
+  // On mobile, probe the PDF size with a HEAD request before mounting the
+  // <Document>. If it exceeds MOBILE_PDF_SIZE_LIMIT we surface a warning rather
+  // than feeding a huge file to pdf.js (which can OOM-kill the iPad Safari tab
+  // mid-parse, leaving no chance to show an error). On HEAD failure we fall
+  // through and let the user try — the warning is opt-in safety, not a hard gate.
+  useEffect(() => {
+    if (!isMobile || !pdfUrl) return;
+    let cancelled = false;
+    fetch(pdfUrl, { method: 'HEAD' })
+      .then(r => {
+        if (cancelled) return;
+        const len = r.headers.get('content-length');
+        const bytes = len ? parseInt(len, 10) : 0;
+        setPdfByteSize(bytes || null);
+        setSizeGate(bytes > MOBILE_PDF_SIZE_LIMIT ? 'large' : 'ok');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSizeGate('ok');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [pdfUrl]);
 
   // Re-fit PDF to width on container resize (e.g. orientation change on mobile)
@@ -133,6 +186,36 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
   }, []);
+
+  // Track pinch-zoom level via the visual viewport and re-render canvases at
+  // a higher DPR when the user zooms in. Debounced so we don't re-rasterize
+  // mid-pinch (each Page render is expensive); we only commit when the gesture
+  // settles. Only re-renders when the change is meaningful — small changes
+  // within ~15% don't justify the cost.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let timer: number | null = null;
+    const handle = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const s = vv.scale || 1;
+        setPinchZoom(prev => (Math.abs(s - prev) > 0.15 ? s : prev));
+      }, 250);
+    };
+    vv.addEventListener('resize', handle);
+    return () => {
+      vv.removeEventListener('resize', handle);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
+  // Effective rendering DPR. Multiplied by pinch zoom so canvases stay sharp
+  // when the user pinches in; capped to keep memory bounded on long PDFs.
+  const effectivePixelRatio = Math.min(
+    baseCanvasPixelRatio * pinchZoom,
+    MAX_CANVAS_PIXEL_RATIO,
+  );
 
   // Sync PDF dark mode with app theme when no user override
   useEffect(() => {
@@ -714,6 +797,37 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
             </div>
           )}
           <div className="pdf-pages-container" ref={containerRef}>
+          {sizeGate === 'pending' && (
+            <div className="pdf-loading">Checking PDF…</div>
+          )}
+          {sizeGate === 'large' && (
+            <div className="pdf-mobile-size-warning">
+              <p className="pdf-mobile-size-warning-title">
+                This PDF is {pdfByteSize ? `${(pdfByteSize / (1024 * 1024)).toFixed(0)} MB` : 'very large'} and may crash mobile browsers.
+              </p>
+              <p className="pdf-mobile-size-warning-body">
+                Opening it in your device's native PDF viewer is faster and more reliable.
+              </p>
+              <div className="pdf-mobile-size-warning-actions">
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary"
+                >
+                  Open in new tab
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSizeGate('ok')}
+                >
+                  Load here anyway
+                </button>
+              </div>
+            </div>
+          )}
+          {sizeGate === 'ok' && (
           <Document
             file={pdfUrl}
             onLoadSuccess={onDocumentLoadSuccess}
@@ -743,7 +857,7 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
                     <Page
                       pageNumber={pageNum}
                       scale={scale}
-                      devicePixelRatio={canvasPixelRatio}
+                      devicePixelRatio={effectivePixelRatio}
                       loading=""
                       error={
                         <div className="pdf-page-error">
@@ -793,6 +907,7 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
               );
             })}
           </Document>
+          )}
         </div>
         </div>
       </div>
