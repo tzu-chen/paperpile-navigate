@@ -5316,6 +5316,25 @@ input[type="color"] {
 .tier-select-4 { color: #94a3b8; }
 .tier-select-ungraded { color: var(--text-muted); opacity: 0.5; }
 
+/* Tier select rendered in the PDF viewer title bar (standalone, no marker column) */
+.tier-select-header {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 56px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  font-size: 13px;
+}
+.tier-select-header:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+}
+.tier-select-header.tier-select-ungraded {
+  opacity: 0.75;
+}
+
 /* Non-T0 tier: tint the marker column subtly */
 .paper-card.library-card.tier-1 .paper-tier-marker { background: color-mix(in srgb, #c084fc 12%, transparent); border-right-color: color-mix(in srgb, #c084fc 30%, var(--border-color)); }
 .paper-card.library-card.tier-2 .paper-tier-marker { background: color-mix(in srgb, #60a5fa 12%, transparent); border-right-color: color-mix(in srgb, #60a5fa 30%, var(--border-color)); }

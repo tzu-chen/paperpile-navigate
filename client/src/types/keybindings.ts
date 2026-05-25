@@ -2,6 +2,11 @@ export type KeybindingAction =
   | 'pdfTocToggle'
   | 'pdfPanelToggle'
   | 'pdfImmersiveToggle'
+  | 'pdfTierSet0'
+  | 'pdfTierSet1'
+  | 'pdfTierSet2'
+  | 'pdfTierSet3'
+  | 'pdfTierSet4'
   | 'goToLibrary'
   | 'goToBrowse';
 
@@ -16,6 +21,11 @@ export const KEYBINDING_META: KeybindingMeta[] = [
   { action: 'pdfTocToggle', label: 'Toggle table of contents', scope: 'PDF viewer', defaultKey: 't' },
   { action: 'pdfPanelToggle', label: 'Toggle right panel', scope: 'PDF viewer', defaultKey: 'p' },
   { action: 'pdfImmersiveToggle', label: 'Toggle fullscreen / immersive mode', scope: 'PDF viewer', defaultKey: 'f' },
+  { action: 'pdfTierSet0', label: 'Set tier T0 (Mirror)', scope: 'PDF viewer', defaultKey: '0' },
+  { action: 'pdfTierSet1', label: 'Set tier T1 (Exalted)', scope: 'PDF viewer', defaultKey: '1' },
+  { action: 'pdfTierSet2', label: 'Set tier T2 (Rare)', scope: 'PDF viewer', defaultKey: '2' },
+  { action: 'pdfTierSet3', label: 'Set tier T3 (Magic)', scope: 'PDF viewer', defaultKey: '3' },
+  { action: 'pdfTierSet4', label: 'Set tier T4 (Normal)', scope: 'PDF viewer', defaultKey: '4' },
   { action: 'goToLibrary', label: 'Go to Library', scope: 'Global', defaultKey: 'l' },
   { action: 'goToBrowse', label: 'Browse new papers', scope: 'Global', defaultKey: 'b' },
 ];

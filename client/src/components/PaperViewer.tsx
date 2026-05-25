@@ -37,6 +37,9 @@ type SidebarSection = 'comments' | 'chat' | 'worldline';
 export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, initialPage }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
+  const [currentTier, setCurrentTier] = useState<number | null>(
+    isSavedPaper(paper) ? paper.tier : null,
+  );
   const [collapsedSections, setCollapsedSections] = useState<Set<SidebarSection>>(new Set());
   const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
   const [jumpToPage, setJumpToPage] = useState<number | undefined>(initialPage);
@@ -108,7 +111,8 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
     loadPaperTags();
     setPdfSelection(null);
     setFloatingCommentAnchor(null);
-  }, [loadComments, loadPaperTags]);
+    setCurrentTier(isSavedPaper(paper) ? paper.tier : null);
+  }, [loadComments, loadPaperTags, paper]);
 
   // Notify parent when immersive mode changes
   useEffect(() => {
@@ -153,6 +157,29 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
 
   const toggleImmersive = useCallback(() => setImmersiveMode(m => !m), []);
   useKeyboardShortcut('pdfImmersiveToggle', toggleImmersive);
+
+  const handleTierChange = useCallback(async (tier: number | null) => {
+    if (!saved) return;
+    const prev = currentTier;
+    setCurrentTier(tier);
+    try {
+      await api.updatePaperTier(saved.id, tier);
+    } catch {
+      setCurrentTier(prev);
+      showNotification('Failed to update tier');
+    }
+  }, [saved, currentTier, showNotification]);
+
+  const setTier0 = useCallback(() => { handleTierChange(0); }, [handleTierChange]);
+  const setTier1 = useCallback(() => { handleTierChange(1); }, [handleTierChange]);
+  const setTier2 = useCallback(() => { handleTierChange(2); }, [handleTierChange]);
+  const setTier3 = useCallback(() => { handleTierChange(3); }, [handleTierChange]);
+  const setTier4 = useCallback(() => { handleTierChange(4); }, [handleTierChange]);
+  useKeyboardShortcut('pdfTierSet0', setTier0, !!saved);
+  useKeyboardShortcut('pdfTierSet1', setTier1, !!saved);
+  useKeyboardShortcut('pdfTierSet2', setTier2, !!saved);
+  useKeyboardShortcut('pdfTierSet3', setTier3, !!saved);
+  useKeyboardShortcut('pdfTierSet4', setTier4, !!saved);
 
   // Swipe left/right to navigate between papers (mobile)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -215,6 +242,24 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
                   Next &#8594;
                 </button>
               </div>
+            )}
+            {saved && (
+              <select
+                className={`tier-select tier-select-header tier-select-${currentTier ?? 'ungraded'}`}
+                value={currentTier === null ? '' : String(currentTier)}
+                onChange={e => {
+                  const v = e.target.value;
+                  handleTierChange(v === '' ? null : parseInt(v, 10));
+                }}
+                title={currentTier === null ? 'Ungraded — press 0–4 to grade' : `T${currentTier} — press 0–4 to change`}
+              >
+                <option value="">—</option>
+                <option value="0">T0</option>
+                <option value="1">T1</option>
+                <option value="2">T2</option>
+                <option value="3">T3</option>
+                <option value="4">T4</option>
+              </select>
             )}
             {absUrl && !arxivId.startsWith('upload-') && (
               <a
