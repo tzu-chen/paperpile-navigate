@@ -1424,6 +1424,43 @@ input[type="color"] {
   border-color: var(--accent-color);
 }
 
+.pdf-jump-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 16px 28px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 20;
+  animation: pdf-jump-hint-fade 900ms ease-out forwards;
+}
+
+.pdf-jump-hint-page {
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pdf-jump-hint-total {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+@keyframes pdf-jump-hint-fade {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
 /* Immersive mode — hides header and PDF toolbar; sidebar/panel-zone remain available */
 .paper-viewer.immersive-mode .viewer-header {
   display: none;

@@ -74,6 +74,13 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set([1]));
   const containerRef = useRef<HTMLDivElement>(null);
   const currentPageRef = useRef(1);
+  // Browser-style back/forward history for in-PDF jumps (TOC clicks, internal
+  // links). Manual scrolling does not push entries; only "jumps" do. ArrowLeft
+  // walks back, ArrowRight walks forward.
+  const jumpHistoryRef = useRef<number[]>([]);
+  const jumpIndexRef = useRef(-1);
+  const [jumpHint, setJumpHint] = useState<number | null>(null);
+  const jumpHintTimerRef = useRef<number | null>(null);
   const [pageInputValue, setPageInputValue] = useState('1');
   // Stores the bounding rect of the active text selection in viewport coords.
   // Used to position the "Add comment" popup AND the floating box that opens on click.
@@ -101,6 +108,8 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     pageWidthRef.current = 0;
     pageHeightRef.current = 0;
     setVisiblePages(new Set([1]));
+    jumpHistoryRef.current = [];
+    jumpIndexRef.current = -1;
   }, [pdfUrl]);
 
   // Re-fit PDF to width on container resize (e.g. orientation change on mobile)
@@ -352,6 +361,78 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     onJumpApplied?.();
   }, [jumpToPage, numPages, goToPage, onJumpApplied]);
 
+  // Briefly overlay the destination page number — gives a clear visual cue
+  // during smooth-scroll jumps where the page change isn't immediate.
+  const showJumpHint = useCallback((page: number) => {
+    setJumpHint(page);
+    if (jumpHintTimerRef.current !== null) {
+      window.clearTimeout(jumpHintTimerRef.current);
+    }
+    jumpHintTimerRef.current = window.setTimeout(() => {
+      setJumpHint(null);
+      jumpHintTimerRef.current = null;
+    }, 900);
+  }, []);
+
+  useEffect(() => () => {
+    if (jumpHintTimerRef.current !== null) {
+      window.clearTimeout(jumpHintTimerRef.current);
+    }
+  }, []);
+
+  // Record a TOC/link jump: snapshot the page we're leaving (so ArrowLeft can
+  // return there), then push the destination. Discards forward history because
+  // a new jump branches off the current point.
+  const recordJump = useCallback((target: number) => {
+    const current = currentPageRef.current;
+    const history = jumpHistoryRef.current.slice(0, jumpIndexRef.current + 1);
+    if (history.length === 0 || history[history.length - 1] !== current) {
+      history.push(current);
+    }
+    if (history[history.length - 1] !== target) {
+      history.push(target);
+    }
+    jumpHistoryRef.current = history;
+    jumpIndexRef.current = history.length - 1;
+  }, []);
+
+  const jumpBack = useCallback(() => {
+    if (jumpIndexRef.current <= 0) return false;
+    jumpIndexRef.current -= 1;
+    const target = jumpHistoryRef.current[jumpIndexRef.current];
+    showJumpHint(target);
+    goToPage(target);
+    return true;
+  }, [goToPage, showJumpHint]);
+
+  const jumpForward = useCallback(() => {
+    if (jumpIndexRef.current >= jumpHistoryRef.current.length - 1) return false;
+    jumpIndexRef.current += 1;
+    const target = jumpHistoryRef.current[jumpIndexRef.current];
+    showJumpHint(target);
+    goToPage(target);
+    return true;
+  }, [goToPage, showJumpHint]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const target = e.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (target.isContentEditable) return;
+      }
+      if (e.key === 'ArrowLeft') {
+        if (jumpBack()) e.preventDefault();
+      } else if (e.key === 'ArrowRight') {
+        if (jumpForward()) e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [jumpBack, jumpForward]);
+
   // react-pdf's <Document> captures onItemClick inside a useRef on first render,
   // so any closure passed inline would see numPages=0 and clamp every jump to page 1.
   // Route through a ref to always hit the current goToPage.
@@ -360,8 +441,10 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     goToPageRef.current = goToPage;
   }, [goToPage]);
   const handleItemClick = useCallback(({ pageNumber }: { pageNumber: number }) => {
+    recordJump(pageNumber);
+    showJumpHint(pageNumber);
     goToPageRef.current(pageNumber);
-  }, []);
+  }, [recordJump, showJumpHint]);
 
   const navigateToOutlineDest = useCallback(async (dest: string | unknown[] | null) => {
     if (!dest || !pdfDocRef.current) return;
@@ -375,13 +458,15 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
         const ref = explicitDest[0];
         const pageIndex = await pdfDocRef.current.getPageIndex(ref);
         if (typeof pageIndex === 'number' && !isNaN(pageIndex)) {
+          recordJump(pageIndex + 1);
+          showJumpHint(pageIndex + 1);
           goToPage(pageIndex + 1);
         }
       }
     } catch (err) {
       console.error('Failed to navigate to outline destination:', err);
     }
-  }, [goToPage]);
+  }, [goToPage, recordJump, showJumpHint]);
 
   const toggleExpanded = useCallback((key: string) => {
     setExpandedItems(prev => {
@@ -620,6 +705,12 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
               >
                 {immersiveMode ? <Icon name="close" /> : <Icon name="expand" />}
               </button>
+            </div>
+          )}
+          {jumpHint !== null && (
+            <div key={`hint-${jumpHint}-${jumpIndexRef.current}`} className="pdf-jump-hint" aria-hidden="true">
+              <span className="pdf-jump-hint-page">{jumpHint}</span>
+              <span className="pdf-jump-hint-total">/ {numPages}</span>
             </div>
           )}
           <div className="pdf-pages-container" ref={containerRef}>
