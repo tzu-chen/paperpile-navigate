@@ -5,6 +5,7 @@ import PDFViewer from './PDFViewer';
 import CommentPanel from './CommentPanel';
 import ChatPanel from './ChatPanel';
 import WorldlineSidebarPanel from './WorldlineSidebarPanel';
+import WorldlineNavOverlay from './WorldlineNavOverlay';
 import FloatingCommentBox from './FloatingCommentBox';
 import LaTeX from './LaTeX';
 import Icon from './Icon';
@@ -49,6 +50,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
   const [sendingToScribe, setSendingToScribe] = useState(false);
   const [pdfSelection, setPdfSelection] = useState<{ text: string; pageNumber: number; rects: CommentPositionRect[] } | null>(null);
   const [floatingCommentAnchor, setFloatingCommentAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [worldlineNavOpen, setWorldlineNavOpen] = useState(false);
 
   const handleRequestAddComment = useCallback((anchor: { x: number; y: number }) => {
     setFloatingCommentAnchor(anchor);
@@ -157,6 +159,11 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
 
   const toggleImmersive = useCallback(() => setImmersiveMode(m => !m), []);
   useKeyboardShortcut('pdfImmersiveToggle', toggleImmersive);
+
+  const openWorldlineNav = useCallback(() => {
+    if (saved) setWorldlineNavOpen(true);
+  }, [saved]);
+  useKeyboardShortcut('pdfWorldlineToggle', openWorldlineNav, !!saved && !worldlineNavOpen);
 
   const handleTierChange = useCallback(async (tier: number | null) => {
     if (!saved) return;
@@ -458,6 +465,14 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
           position={floatingCommentAnchor}
           onClose={closeFloatingComment}
           onAdded={loadComments}
+          showNotification={showNotification}
+        />
+      )}
+      {saved && worldlineNavOpen && (
+        <WorldlineNavOverlay
+          paper={saved}
+          onOpenPaper={onOpenPaper}
+          onClose={() => setWorldlineNavOpen(false)}
           showNotification={showNotification}
         />
       )}
