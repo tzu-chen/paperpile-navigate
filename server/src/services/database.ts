@@ -289,6 +289,10 @@ export function getPaperTags(paperId: number) {
   `).all(paperId);
 }
 
+export function getAllPaperTagAssociations() {
+  return db.prepare('SELECT paper_id, tag_id FROM paper_tags').all() as { paper_id: number; tag_id: number }[];
+}
+
 // Favorite author operations
 export function addFavoriteAuthor(name: string) {
   return db.prepare('INSERT INTO favorite_authors (name) VALUES (?)').run(name);

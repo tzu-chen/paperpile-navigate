@@ -4278,24 +4278,109 @@ input[type="color"] {
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
 }
 
-/* PDF Badge */
-.pdf-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-weight: 600;
-  text-transform: uppercase;
-  white-space: nowrap;
+.paper-card.active {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
-.pdf-badge-local {
-  background: var(--success);
-  color: white;
-}
-
-.pdf-badge-none {
+/* Cache indicator (A = ArXiv uncached, C = Cached, U = Uploaded) */
+.paper-cache-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  padding: 0;
+}
+
+.paper-cache-indicator-a {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.paper-cache-indicator-a:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+
+.paper-cache-indicator-c {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.paper-cache-indicator-c:hover {
+  background: color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.paper-cache-indicator-u {
+  color: #c084fc;
+  border-color: color-mix(in srgb, #c084fc 50%, var(--border-color));
+  background: color-mix(in srgb, #c084fc 12%, transparent);
+  cursor: default;
+}
+
+/* Paper tag chips */
+.paper-tag-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.paper-tag-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  padding-right: 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.paper-tag-chip-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--bg-card);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--transition), color var(--transition);
+}
+
+.paper-tag-chip-remove:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* ========================

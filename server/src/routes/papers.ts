@@ -327,6 +327,32 @@ router.get('/:id/pdf', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/papers/:id/pdf - Download PDF for a single paper
+router.post('/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const paper = db.getPaper(paramInt(req.params.id)) as any;
+    if (!paper) {
+      return res.status(404).json({ error: 'Paper not found' });
+    }
+    if (paper.pdf_path) {
+      return res.json({ success: true, pdf_path: paper.pdf_path });
+    }
+    if (paper.arxiv_id.startsWith('upload-')) {
+      return res.status(400).json({ error: 'Uploaded papers cannot be re-downloaded' });
+    }
+
+    const pdfPath = await downloadAndStorePdf(paper.arxiv_id);
+    if (!pdfPath) {
+      return res.status(502).json({ error: 'Failed to download PDF from ArXiv' });
+    }
+    db.updatePaperPdfPath(paper.id, pdfPath);
+    res.json({ success: true, pdf_path: pdfPath });
+  } catch (error) {
+    console.error('Download PDF error:', error);
+    res.status(500).json({ error: 'Failed to download PDF' });
+  }
+});
+
 // DELETE /api/papers/:id/pdf - Delete local PDF, keep paper record
 router.delete('/:id/pdf', (req: Request, res: Response) => {
   try {

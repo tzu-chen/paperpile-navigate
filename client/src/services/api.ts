@@ -153,6 +153,10 @@ export async function deleteLocalPdf(paperId: number): Promise<void> {
   await request(`/papers/${paperId}/pdf`, { method: 'DELETE' });
 }
 
+export async function downloadLocalPdf(paperId: number): Promise<{ success: boolean; pdf_path: string }> {
+  return request(`/papers/${paperId}/pdf`, { method: 'POST' });
+}
+
 // Bulk Operations
 export async function bulkDownloadPdfs(paperIds: number[]): Promise<{
   success: boolean;
@@ -261,6 +265,10 @@ export async function deleteComment(
 // Tags
 export async function getTags(): Promise<Tag[]> {
   return request('/tags');
+}
+
+export async function getTagAssociations(): Promise<Record<number, number[]>> {
+  return request('/tags/associations');
 }
 
 export async function createTag(name: string, color: string): Promise<Tag> {

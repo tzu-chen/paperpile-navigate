@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
@@ -13,6 +13,16 @@ interface Props {
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
   onSearchAuthor: (name: string) => void;
+}
+
+const TAG_COLOR_PALETTE = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+  '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#84cc16',
+  '#06b6d4', '#a855f7', '#facc15', '#f43f5e', '#22c55e',
+];
+
+function randomTagColor(): string {
+  return TAG_COLOR_PALETTE[Math.floor(Math.random() * TAG_COLOR_PALETTE.length)];
 }
 
 const TIER_LABELS: Record<number, string> = {
@@ -60,7 +70,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [showTierRubric, setShowTierRubric] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#6366f1');
   const [creatingTag, setCreatingTag] = useState(false);
   const [taggedPaperIds, setTaggedPaperIds] = useState<Set<number> | null>(null);
 
@@ -73,6 +82,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const editTagInputRef = useRef<HTMLInputElement>(null);
   const [worldlinePaperIds, setWorldlinePaperIds] = useState<Set<number> | null>(null);
   const [filterWorldlines, setFilterWorldlines] = useState<Worldline[]>([]);
+  const [tagsByPaper, setTagsByPaper] = useState<Record<number, number[]>>({});
 
   // Import panel state
   const [showImport, setShowImport] = useState(false);
@@ -82,9 +92,9 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
 
   // Bulk selection state
   const [selectedPaperIds, setSelectedPaperIds] = useState<Set<number>>(new Set());
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkAction, setBulkAction] = useState<string | null>(null);
-  const [selectMode, setSelectMode] = useState(false);
+  const [activePaperId, setActivePaperId] = useState<number | null>(null);
+  const [anchorPaperId, setAnchorPaperId] = useState<number | null>(null);
+  const paperCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Mobile actions toggle
   const [showMobileActions, setShowMobileActions] = useState(false);
@@ -106,6 +116,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     api.getWorldlines().then(setFilterWorldlines).catch(() => {});
   }, [papers]);
 
+  // Load paper-tag associations
+  useEffect(() => {
+    api.getTagAssociations().then(setTagsByPaper).catch(() => {});
+  }, [papers, tags]);
+
   // Fetch paper IDs for selected worldline filter
   useEffect(() => {
     if (filterWorldline === null) {
@@ -119,10 +134,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     });
   }, [filterWorldline, papers]);
 
-  // Clear selection and exit select mode when filters change
+  // Clear selection when filters change
   useEffect(() => {
     setSelectedPaperIds(new Set());
-    setSelectMode(false);
+    setActivePaperId(null);
+    setAnchorPaperId(null);
   }, [filterTag, filterWorldline, filterTier, searchTerm]);
 
   const filteredPapers = papers.filter(p => {
@@ -145,43 +161,120 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   });
 
   // Selection helpers
-  function toggleSelection(paperId: number) {
-    setSelectedPaperIds(prev => {
-      const next = new Set(prev);
-      if (next.has(paperId)) next.delete(paperId);
-      else next.add(paperId);
-      return next;
-    });
-  }
-
-  function selectAll() {
-    setSelectedPaperIds(new Set(filteredPapers.map(p => p.id)));
-  }
-
-  function selectNone() {
+  function clearSelection() {
     setSelectedPaperIds(new Set());
+    setActivePaperId(null);
+    setAnchorPaperId(null);
   }
 
-  const toggleSelectMode = useCallback(() => {
-    setSelectMode(prev => {
-      if (prev) setSelectedPaperIds(new Set());
-      return !prev;
-    });
-  }, []);
-
-  function exitSelectMode() {
-    setSelectMode(false);
-    setSelectedPaperIds(new Set());
+  function rangeBetween(fromId: number, toId: number): Set<number> {
+    const fromIdx = filteredPapers.findIndex(p => p.id === fromId);
+    const toIdx = filteredPapers.findIndex(p => p.id === toId);
+    if (fromIdx === -1 || toIdx === -1) return new Set([toId]);
+    const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+    const range = new Set<number>();
+    for (let i = lo; i <= hi; i++) range.add(filteredPapers[i].id);
+    return range;
   }
 
-  // Card click handler
+  function scrollPaperIntoView(paperId: number) {
+    const el = paperCardRefs.current.get(paperId);
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Single click selects, double click opens
   function handleCardClick(paper: SavedPaper, e: React.MouseEvent) {
     const target = e.target as HTMLElement;
     if (target.closest('select') || target.closest('option') || target.closest('.author-name-btn')) return;
-    if (selectMode) {
-      toggleSelection(paper.id);
+
+    if (e.shiftKey && anchorPaperId !== null) {
+      setSelectedPaperIds(rangeBetween(anchorPaperId, paper.id));
+      setActivePaperId(paper.id);
+    } else if (e.ctrlKey || e.metaKey) {
+      setSelectedPaperIds(prev => {
+        const next = new Set(prev);
+        if (next.has(paper.id)) next.delete(paper.id);
+        else next.add(paper.id);
+        return next;
+      });
+      setActivePaperId(paper.id);
+      setAnchorPaperId(paper.id);
     } else {
-      onOpenPaper(paper);
+      setSelectedPaperIds(new Set([paper.id]));
+      setActivePaperId(paper.id);
+      setAnchorPaperId(paper.id);
+    }
+  }
+
+  function handleCardDoubleClick(paper: SavedPaper, e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('select') || target.closest('option') || target.closest('.author-name-btn')) return;
+    onOpenPaper(paper);
+  }
+
+  // Keyboard navigation: up/down to move, shift to extend, enter to open
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      }
+      if (filteredPapers.length === 0) return;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        let newActiveId: number;
+        if (activePaperId === null) {
+          newActiveId = filteredPapers[0].id;
+        } else {
+          const currentIdx = filteredPapers.findIndex(p => p.id === activePaperId);
+          if (currentIdx === -1) {
+            newActiveId = filteredPapers[0].id;
+          } else {
+            const delta = e.key === 'ArrowDown' ? 1 : -1;
+            const nextIdx = Math.max(0, Math.min(filteredPapers.length - 1, currentIdx + delta));
+            newActiveId = filteredPapers[nextIdx].id;
+          }
+        }
+
+        if (e.shiftKey && anchorPaperId !== null) {
+          setSelectedPaperIds(rangeBetween(anchorPaperId, newActiveId));
+          setActivePaperId(newActiveId);
+        } else {
+          setSelectedPaperIds(new Set([newActiveId]));
+          setActivePaperId(newActiveId);
+          setAnchorPaperId(newActiveId);
+        }
+        scrollPaperIntoView(newActiveId);
+      } else if (e.key === 'Enter') {
+        if (selectedPaperIds.size === 1) {
+          const id = Array.from(selectedPaperIds)[0];
+          const paper = papers.find(p => p.id === id);
+          if (paper) {
+            e.preventDefault();
+            onOpenPaper(paper);
+          }
+        }
+      } else if (e.key === 'Escape') {
+        if (selectedPaperIds.size > 0) clearSelection();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [filteredPapers, activePaperId, anchorPaperId, selectedPaperIds, papers, onOpenPaper]);
+
+  async function handleToggleCache(paper: SavedPaper) {
+    if (paper.arxiv_id.startsWith('upload-')) return;
+    try {
+      if (paper.pdf_path) {
+        await api.deleteLocalPdf(paper.id);
+      } else {
+        await api.downloadLocalPdf(paper.id);
+      }
+      await onRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || (paper.pdf_path ? 'Failed to uncache PDF' : 'Failed to cache PDF'));
     }
   }
 
@@ -191,22 +284,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
       await onRefresh();
     } catch {
       showNotification('Failed to update tier');
-    }
-  }
-
-  async function handleBulkTierChange(tier: number | null) {
-    setBulkLoading(true);
-    setBulkAction('Updating tier');
-    try {
-      const result = await api.bulkUpdateTier(Array.from(selectedPaperIds), tier);
-      showNotification(`Updated tier for ${result.updated} paper(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to update tier');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
     }
   }
 
@@ -239,14 +316,51 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
       return;
     }
     try {
-      await api.createTag(trimmed, newTagColor);
+      await api.createTag(trimmed, randomTagColor());
       setNewTagName('');
-      setNewTagColor('#6366f1');
       setCreatingTag(false);
       showNotification(`Tag "${trimmed}" created`);
       await onRefresh();
     } catch (err: any) {
       showNotification(err.message || 'Failed to create tag');
+    }
+  }
+
+  async function handleShuffleTagColors() {
+    if (tags.length === 0) return;
+    try {
+      await Promise.all(tags.map(t => api.updateTag(t.id, t.name, randomTagColor())));
+      showNotification('Tag colors shuffled');
+      await onRefresh();
+    } catch {
+      showNotification('Failed to shuffle tag colors');
+    }
+  }
+
+  async function handleSidebarTagClick(tag: Tag) {
+    if (selectedPaperIds.size > 0) {
+      // Apply tag to selected papers instead of filtering
+      try {
+        const result = await api.bulkAddTag(Array.from(selectedPaperIds), tag.id);
+        showNotification(`Applied "${tag.name}" to ${result.applied} paper(s)`);
+        await onRefresh();
+      } catch {
+        showNotification('Failed to apply tag');
+      }
+      return;
+    }
+    setFilterTag(filterTag === tag.id ? null : tag.id);
+  }
+
+  async function handleRemovePaperTag(paperId: number, tagId: number) {
+    try {
+      await api.removePaperTag(paperId, tagId);
+      setTagsByPaper(prev => {
+        const current = prev[paperId] || [];
+        return { ...prev, [paperId]: current.filter(id => id !== tagId) };
+      });
+    } catch {
+      showNotification('Failed to remove tag');
     }
   }
 
@@ -318,110 +432,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     if (selectedPaperIds.size === 0) setShowExportChoice(false);
   }, [selectedPaperIds]);
 
-  // Bulk operation handlers
-  async function handleBulkDownloadPdfs() {
-    setBulkLoading(true);
-    setBulkAction('Downloading PDFs');
-    try {
-      const result = await api.bulkDownloadPdfs(Array.from(selectedPaperIds));
-      showNotification(`Downloaded ${result.downloaded} PDFs${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to download PDFs');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-  async function handleBulkDeletePdfs() {
-    if (!confirm(`Delete local PDFs for ${selectedPaperIds.size} paper(s)?`)) return;
-    setBulkLoading(true);
-    setBulkAction('Deleting PDFs');
-    try {
-      const result = await api.bulkDeletePdfs(Array.from(selectedPaperIds));
-      showNotification(`Deleted ${result.deleted} local PDF(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to delete PDFs');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-  async function handleBulkSendToScribe() {
-    if (!confirm(`Send ${selectedPaperIds.size} paper(s) to Scribe? Papers will be removed from Navigate.`)) return;
-    setBulkLoading(true);
-    setBulkAction('Sending to Scribe');
-    try {
-      const result = await api.sendToScribe(Array.from(selectedPaperIds));
-      const msg = `Sent ${result.sent} paper(s) to Scribe${result.failed > 0 ? `, ${result.failed} failed` : ''}`;
-      showNotification(msg);
-      if (result.errors.length > 0) console.warn('Send to Scribe errors:', result.errors);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to send papers to Scribe. Is Scribe running?');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-  async function handleBulkDelete() {
-    if (!confirm(`Delete ${selectedPaperIds.size} paper(s) from your library? This cannot be undone.`)) return;
-    setBulkLoading(true);
-    setBulkAction('Deleting papers');
-    try {
-      const result = await api.bulkDeletePapers(Array.from(selectedPaperIds));
-      showNotification(`Deleted ${result.deleted} paper(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to delete papers');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-  async function handleBulkAddTag(tagId: number) {
-    setBulkLoading(true);
-    setBulkAction('Adding tag');
-    try {
-      const result = await api.bulkAddTag(Array.from(selectedPaperIds), tagId);
-      showNotification(`Added tag to ${result.applied} paper(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to add tag');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-  async function handleBulkRemoveTag(tagId: number) {
-    setBulkLoading(true);
-    setBulkAction('Removing tag');
-    try {
-      const result = await api.bulkRemoveTag(Array.from(selectedPaperIds), tagId);
-      showNotification(`Removed tag from ${result.removed} paper(s)`);
-      exitSelectMode();
-      await onRefresh();
-    } catch {
-      showNotification('Failed to remove tag');
-    } finally {
-      setBulkLoading(false);
-      setBulkAction(null);
-    }
-  }
-
-
-
   return (
     <div className="library">
       {/* Sidebar */}
@@ -487,11 +497,25 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         </div>
 
         <div className="sidebar-section">
-          <h4 className="sidebar-section-title">Tags</h4>
+          <h4 className="sidebar-section-title sidebar-section-title-row">
+            <span>Tags</span>
+            {tags.length > 0 && (
+              <button
+                type="button"
+                className="sidebar-help-btn"
+                onClick={handleShuffleTagColors}
+                title="Shuffle all tag colors"
+                aria-label="Shuffle all tag colors"
+              >
+                ⤭
+              </button>
+            )}
+          </h4>
           {tags.length > 0 && (
             <button
               className={`sidebar-item${filterTag === null ? ' active' : ''}`}
               onClick={() => setFilterTag(null)}
+              title={selectedPaperIds.size > 0 ? 'Selection mode — pick a tag below to apply' : 'Show all'}
             >
               All
             </button>
@@ -521,11 +545,12 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
               ) : (
                 <button
                   className={`sidebar-item${filterTag === tag.id ? ' active' : ''}`}
-                  onClick={() => setFilterTag(filterTag === tag.id ? null : tag.id)}
+                  onClick={() => handleSidebarTagClick(tag)}
                   onContextMenu={e => {
                     e.preventDefault();
                     setTagContextMenu({ x: e.clientX, y: e.clientY, tag });
                   }}
+                  title={selectedPaperIds.size > 0 ? `Apply "${tag.name}" to ${selectedPaperIds.size} selected paper(s)` : `Filter by ${tag.name}`}
                 >
                   <span className="sidebar-item-dot" style={{ backgroundColor: tag.color }} />
                   {tag.name}
@@ -549,12 +574,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                   }
                 }}
                 onBlur={handleCreateTag}
-              />
-              <input
-                type="color"
-                className="sidebar-color-input"
-                value={newTagColor}
-                onChange={e => setNewTagColor(e.target.value)}
               />
             </div>
           ) : (
@@ -586,15 +605,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                 onChange={e => setSearchTerm(e.target.value)}
                 className="search-input"
               />
-            </div>
-
-            <div className="control-group">
-              <button
-                className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={toggleSelectMode}
-              >
-                {selectMode ? `Done (${selectedPaperIds.size})` : 'Select'}
-              </button>
             </div>
 
             <div className="control-group mobile-actions-toggle">
@@ -653,71 +663,6 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
           />
         )}
 
-        {/* Bulk operations toolbar */}
-        {selectMode && selectedPaperIds.size > 0 && (
-          <div className="bulk-toolbar">
-            <span className="bulk-count">{selectedPaperIds.size} selected</span>
-            <button className="btn btn-secondary btn-sm" onClick={selectAll} disabled={bulkLoading}>
-              Select All ({filteredPapers.length})
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={selectNone} disabled={bulkLoading}>
-              Deselect All
-            </button>
-            <span className="bulk-separator" />
-            <button className="btn btn-primary btn-sm" onClick={handleBulkDownloadPdfs} disabled={bulkLoading}>
-              Download PDFs
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleBulkDeletePdfs} disabled={bulkLoading}>
-              Delete PDFs
-            </button>
-            <select
-              onChange={e => {
-                if (e.target.value === '') return;
-                const v = e.target.value;
-                handleBulkTierChange(v === 'ungraded' ? null : parseInt(v, 10));
-                e.target.value = '';
-              }}
-              defaultValue=""
-              disabled={bulkLoading}
-            >
-              <option value="">Set Tier...</option>
-              <option value="0">T0 — Groundbreaking</option>
-              <option value="1">T1</option>
-              <option value="2">T2</option>
-              <option value="3">T3</option>
-              <option value="4">T4</option>
-              <option value="ungraded">Ungrade</option>
-            </select>
-            <select
-              onChange={e => { if (e.target.value) handleBulkAddTag(parseInt(e.target.value, 10)); e.target.value = ''; }}
-              defaultValue=""
-              disabled={bulkLoading}
-            >
-              <option value="">Add Tag...</option>
-              {tags.map(tag => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-            <select
-              onChange={e => { if (e.target.value) handleBulkRemoveTag(parseInt(e.target.value, 10)); e.target.value = ''; }}
-              defaultValue=""
-              disabled={bulkLoading}
-            >
-              <option value="">Remove Tag...</option>
-              {tags.map(tag => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-            <button className="btn btn-primary btn-sm" onClick={handleBulkSendToScribe} disabled={bulkLoading}>
-              Send to Scribe
-            </button>
-            <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkLoading}>
-              Delete Papers
-            </button>
-            {bulkLoading && <span className="bulk-status">{bulkAction}...</span>}
-          </div>
-        )}
-
         {filteredPapers.length === 0 ? (
           <div className="empty-state">
             {papers.length === 0
@@ -732,13 +677,26 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
               const tierValue = paper.tier ?? null;
               const tierClass = tierValue !== null ? ` tier-${tierValue}` : ' tier-ungraded';
 
+              const isUploaded = paper.arxiv_id.startsWith('upload-');
+              const cacheLetter = isUploaded ? 'U' : paper.pdf_path ? 'C' : 'A';
+              const cacheTitle = isUploaded
+                ? 'Uploaded PDF'
+                : paper.pdf_path
+                  ? 'Cached locally — click to uncache'
+                  : 'ArXiv (not cached) — click to cache';
+              const isActive = activePaperId === paper.id;
               return (
                 <div
                   key={paper.id}
-                  className={`paper-card library-card${tierClass}${selectedPaperIds.has(paper.id) ? ' selected' : ''}`}
+                  ref={el => {
+                    if (el) paperCardRefs.current.set(paper.id, el);
+                    else paperCardRefs.current.delete(paper.id);
+                  }}
+                  className={`paper-card library-card${tierClass}${selectedPaperIds.has(paper.id) ? ' selected' : ''}${isActive ? ' active' : ''}`}
                   onClick={e => handleCardClick(paper, e)}
+                  onDoubleClick={e => handleCardDoubleClick(paper, e)}
                 >
-                  <div className="paper-tier-marker" onClick={e => e.stopPropagation()}>
+                  <div className="paper-tier-marker" onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
                     <select
                       className={`tier-select tier-select-${tierValue ?? 'ungraded'}`}
                       value={tierValue === null ? '' : String(tierValue)}
@@ -756,18 +714,29 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                       <option value="4">T4</option>
                     </select>
                   </div>
+                  {isUploaded ? (
+                    <span
+                      className="paper-cache-indicator paper-cache-indicator-u"
+                      title={cacheTitle}
+                      onClick={e => e.stopPropagation()}
+                      onDoubleClick={e => e.stopPropagation()}
+                    >
+                      {cacheLetter}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`paper-cache-indicator paper-cache-indicator-${cacheLetter.toLowerCase()}`}
+                      title={cacheTitle}
+                      onClick={e => { e.stopPropagation(); handleToggleCache(paper); }}
+                      onDoubleClick={e => e.stopPropagation()}
+                    >
+                      {cacheLetter}
+                    </button>
+                  )}
                   <div className="paper-card-body">
                   <div className="paper-card-header">
                     <div className="paper-select-title">
-                      {selectMode && (
-                        <input
-                          type="checkbox"
-                          checked={selectedPaperIds.has(paper.id)}
-                          onChange={() => toggleSelection(paper.id)}
-                          className="paper-checkbox"
-                          onClick={e => e.stopPropagation()}
-                        />
-                      )}
                       <h3 className="paper-title">
                         <LaTeX>{paper.title}</LaTeX>
                       </h3>
@@ -794,12 +763,34 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                     <span className="paper-date">
                       Added {new Date(paper.added_at).toLocaleDateString()}
                     </span>
-                    {paper.arxiv_id.startsWith('upload-') && (
-                      <span className="category-badge" style={{ backgroundColor: '#8b5cf6' }}>Uploaded</span>
+                    {(tagsByPaper[paper.id]?.length ?? 0) > 0 && (
+                      <span className="paper-tag-chips">
+                        {tagsByPaper[paper.id]
+                          .map(id => tags.find(t => t.id === id))
+                          .filter((t): t is Tag => !!t)
+                          .map(tag => (
+                            <span
+                              key={tag.id}
+                              className="paper-tag-chip"
+                              style={{ backgroundColor: tag.color }}
+                              onClick={e => e.stopPropagation()}
+                              onDoubleClick={e => e.stopPropagation()}
+                            >
+                              {tag.name}
+                              <button
+                                type="button"
+                                className="paper-tag-chip-remove"
+                                title={`Remove "${tag.name}"`}
+                                aria-label={`Remove ${tag.name}`}
+                                onClick={e => { e.stopPropagation(); handleRemovePaperTag(paper.id, tag.id); }}
+                                onDoubleClick={e => e.stopPropagation()}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                      </span>
                     )}
-                    <span className={`pdf-badge ${paper.pdf_path ? 'pdf-badge-local' : 'pdf-badge-none'}`}>
-                      {paper.pdf_path ? 'PDF' : 'No PDF'}
-                    </span>
                   </div>
                   </div>
                 </div>

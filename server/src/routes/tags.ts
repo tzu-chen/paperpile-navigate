@@ -18,6 +18,22 @@ router.get('/', (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/tags/associations - Map of paper_id -> tag_id[]
+router.get('/associations', (_req: Request, res: Response) => {
+  try {
+    const rows = db.getAllPaperTagAssociations();
+    const map: Record<number, number[]> = {};
+    for (const { paper_id, tag_id } of rows) {
+      if (!map[paper_id]) map[paper_id] = [];
+      map[paper_id].push(tag_id);
+    }
+    res.json(map);
+  } catch (error) {
+    console.error('Get tag associations error:', error);
+    res.status(500).json({ error: 'Failed to get tag associations' });
+  }
+});
+
 // POST /api/tags - Create a new tag
 router.post('/', (req: Request, res: Response) => {
   try {
