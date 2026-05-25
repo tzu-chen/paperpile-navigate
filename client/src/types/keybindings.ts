@@ -1,6 +1,7 @@
 export type KeybindingAction =
   | 'pdfTocToggle'
   | 'pdfPanelToggle'
+  | 'pdfImmersiveToggle'
   | 'goToLibrary'
   | 'goToBrowse';
 
@@ -14,6 +15,7 @@ export interface KeybindingMeta {
 export const KEYBINDING_META: KeybindingMeta[] = [
   { action: 'pdfTocToggle', label: 'Toggle table of contents', scope: 'PDF viewer', defaultKey: 't' },
   { action: 'pdfPanelToggle', label: 'Toggle right panel', scope: 'PDF viewer', defaultKey: 'p' },
+  { action: 'pdfImmersiveToggle', label: 'Toggle fullscreen / immersive mode', scope: 'PDF viewer', defaultKey: 'f' },
   { action: 'goToLibrary', label: 'Go to Library', scope: 'Global', defaultKey: 'l' },
   { action: 'goToBrowse', label: 'Browse new papers', scope: 'Global', defaultKey: 'b' },
 ];

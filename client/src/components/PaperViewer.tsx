@@ -47,7 +47,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
   const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
   const [jumpToPage, setJumpToPage] = useState<number | undefined>(initialPage);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [immersiveMode, setImmersiveMode] = useState(false);
+  const [immersiveMode, setImmersiveMode] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingToScribe, setSendingToScribe] = useState(false);
 
@@ -127,6 +127,9 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
 
   const togglePanel = useCallback(() => setSidebarVisible(v => !v), []);
   useKeyboardShortcut('pdfPanelToggle', togglePanel);
+
+  const toggleImmersive = useCallback(() => setImmersiveMode(m => !m), []);
+  useKeyboardShortcut('pdfImmersiveToggle', toggleImmersive);
 
   // Swipe left/right to navigate between papers (mobile)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
