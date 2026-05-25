@@ -515,6 +515,10 @@ export async function getWorldlinePapers(worldlineId: number): Promise<SavedPape
   return request(`/worldlines/${worldlineId}/papers`);
 }
 
+export async function getWorldlineAssociations(): Promise<Record<number, number[]>> {
+  return request('/worldlines/associations');
+}
+
 export async function addWorldlinePaper(worldlineId: number, paperId: number, position: number): Promise<void> {
   await request(`/worldlines/${worldlineId}/papers`, {
     method: 'POST',

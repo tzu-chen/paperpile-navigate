@@ -3,6 +3,7 @@ import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 import ImportPanel from './ImportPanel';
+import AssignPopup from './AssignPopup';
 
 interface Props {
   papers: SavedPaper[];
@@ -92,6 +93,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [worldlinePaperIds, setWorldlinePaperIds] = useState<Set<number> | null>(null);
   const [filterWorldlines, setFilterWorldlines] = useState<Worldline[]>([]);
   const [tagsByPaper, setTagsByPaper] = useState<Record<number, number[]>>({});
+  const [worldlinesByPaper, setWorldlinesByPaper] = useState<Record<number, number[]>>({});
 
   // Import panel state
   const [showImport, setShowImport] = useState(false);
@@ -107,6 +109,9 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
 
   // Mobile actions toggle
   const [showMobileActions, setShowMobileActions] = useState(false);
+
+  // Assign popup (worldline/tag) state
+  const [showAssignPopup, setShowAssignPopup] = useState(false);
 
   useEffect(() => {
     if (filterTag === null) {
@@ -129,6 +134,11 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   useEffect(() => {
     api.getTagAssociations().then(setTagsByPaper).catch(() => {});
   }, [papers, tags]);
+
+  // Load paper-worldline associations (used for the assign popup hints)
+  useEffect(() => {
+    api.getWorldlineAssociations().then(setWorldlinesByPaper).catch(() => {});
+  }, [papers, filterWorldlines]);
 
   // Fetch paper IDs for selected worldline filter
   useEffect(() => {
@@ -280,6 +290,10 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         if (selectedPaperIds.size === 0) return;
         e.preventDefault();
         handleDeleteSelected();
+      } else if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (selectedPaperIds.size === 0) return;
+        e.preventDefault();
+        setShowAssignPopup(true);
       }
     }
 
@@ -894,6 +908,20 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             </div>
           </div>
         </div>
+      )}
+
+      {/* Assign worldline/tag popup (triggered by A key) */}
+      {showAssignPopup && selectedPaperIds.size > 0 && (
+        <AssignPopup
+          selectedPaperIds={selectedPaperIds}
+          worldlines={filterWorldlines}
+          tags={tags}
+          tagsByPaper={tagsByPaper}
+          worldlinesByPaper={worldlinesByPaper}
+          onClose={() => setShowAssignPopup(false)}
+          onApplied={onRefresh}
+          showNotification={showNotification}
+        />
       )}
 
       {/* Tag context menu */}

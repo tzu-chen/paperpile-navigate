@@ -4649,6 +4649,138 @@ input[type="color"] {
 }
 
 /* ========================
+   Assign Popup (press A in Library with selection)
+   ======================== */
+.assign-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.12s ease;
+}
+
+.assign-popup {
+  width: 520px;
+  max-width: 92vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: transparent;
+}
+
+.assign-popup-search {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 17px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.assign-popup-search:focus {
+  border-color: var(--accent);
+}
+
+.assign-popup-list {
+  overflow-y: auto;
+  max-height: 50vh;
+  padding: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.assign-popup-list::-webkit-scrollbar {
+  display: none;
+}
+
+.assign-popup-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.assign-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.assign-popup-row.selected {
+  background: var(--bg-tertiary);
+}
+
+.assign-popup-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.assign-popup-name {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assign-popup-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.assign-popup-applied {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.assign-popup-applied.applied-all {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.assign-popup-applied.applied-partial {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.assign-popup-check {
+  font-weight: 700;
+}
+
+/* Dim the name slightly when fully applied to convey "already done" */
+.assign-popup-row.applied-all .assign-popup-name {
+  color: var(--text-secondary);
+}
+
+/* ========================
    Worldline Similarity Indicators
    ======================== */
 .worldline-scanning-bar {

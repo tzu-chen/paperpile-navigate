@@ -320,6 +320,10 @@ export function getAllPaperTagAssociations() {
   return db.prepare('SELECT paper_id, tag_id FROM paper_tags').all() as { paper_id: number; tag_id: number }[];
 }
 
+export function getAllWorldlinePaperAssociations() {
+  return db.prepare('SELECT paper_id, worldline_id FROM worldline_papers').all() as { paper_id: number; worldline_id: number }[];
+}
+
 // Favorite author operations
 export function addFavoriteAuthor(name: string) {
   return db.prepare('INSERT INTO favorite_authors (name) VALUES (?)').run(name);

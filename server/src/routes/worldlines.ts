@@ -264,6 +264,22 @@ router.get('/related-papers/:arxivId', (req: Request, res: Response) => {
 
 // --- Worldlines ---
 
+// GET /api/worldlines/associations - Map of paper_id -> worldline_id[]
+router.get('/associations', (_req: Request, res: Response) => {
+  try {
+    const rows = db.getAllWorldlinePaperAssociations();
+    const map: Record<number, number[]> = {};
+    for (const { paper_id, worldline_id } of rows) {
+      if (!map[paper_id]) map[paper_id] = [];
+      map[paper_id].push(worldline_id);
+    }
+    res.json(map);
+  } catch (error) {
+    console.error('Get worldline associations error:', error);
+    res.status(500).json({ error: 'Failed to get worldline associations' });
+  }
+});
+
 // GET /api/worldlines - List all worldlines
 router.get('/', (_req: Request, res: Response) => {
   try {
