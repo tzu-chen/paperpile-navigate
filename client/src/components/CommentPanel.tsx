@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Comment } from '../types';
+import { Comment, CommentPositionRect } from '../types';
 import * as api from '../services/api';
 import Icon from './Icon';
 
@@ -10,13 +10,17 @@ interface Props {
   onPageChange: (page: number) => void;
   onRefresh: () => Promise<void>;
   showNotification: (msg: string) => void;
+  selection?: { text: string; pageNumber: number; rects: CommentPositionRect[] } | null;
+  onClearSelection?: () => void;
 }
 
-export default function CommentPanel({ paperId, comments, currentPage, onPageChange, onRefresh, showNotification }: Props) {
+export default function CommentPanel({ paperId, comments, currentPage, onPageChange, onRefresh, showNotification, selection, onClearSelection }: Props) {
   const [newComment, setNewComment] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const effectivePage = selection ? selection.pageNumber : currentPage;
 
   async function handleAdd() {
     if (!newComment.trim()) return;
@@ -25,9 +29,12 @@ export default function CommentPanel({ paperId, comments, currentPage, onPageCha
       await api.addComment(
         paperId,
         newComment.trim(),
-        currentPage
+        effectivePage,
+        selection?.text ?? null,
+        selection && selection.rects.length > 0 ? JSON.stringify(selection.rects) : null
       );
       setNewComment('');
+      onClearSelection?.();
       await onRefresh();
       showNotification('Comment added');
     } catch {
@@ -69,8 +76,23 @@ export default function CommentPanel({ paperId, comments, currentPage, onPageCha
   return (
     <div className="comment-panel">
       <div className="comment-input-section">
+        {selection && (
+          <div className="comment-selection-preview">
+            <div className="comment-selection-label">
+              <span>Quoting page {selection.pageNumber}</span>
+              <button
+                className="btn-icon"
+                onClick={() => onClearSelection?.()}
+                title="Clear selection"
+              >
+                &times;
+              </button>
+            </div>
+            <blockquote className="comment-selection-quote">{selection.text}</blockquote>
+          </div>
+        )}
         <textarea
-          placeholder="Add a comment..."
+          placeholder={selection ? 'Comment on selected text...' : 'Add a comment...'}
           value={newComment}
           onChange={e => setNewComment(e.target.value)}
           rows={3}
@@ -84,12 +106,14 @@ export default function CommentPanel({ paperId, comments, currentPage, onPageCha
             <input
               type="number"
               min="1"
-              value={currentPage}
+              value={effectivePage}
               onChange={e => {
                 const num = parseInt(e.target.value, 10);
                 if (!isNaN(num) && num > 0) onPageChange(num);
               }}
               className="comment-page-input"
+              disabled={!!selection}
+              title={selection ? 'Page is set by text selection' : undefined}
             />
           </label>
           <button
@@ -127,6 +151,9 @@ export default function CommentPanel({ paperId, comments, currentPage, onPageCha
               </div>
             ) : (
               <>
+                {comment.selected_text && (
+                  <blockquote className="comment-quote">{comment.selected_text}</blockquote>
+                )}
                 <div className="comment-content">{comment.content}</div>
                 <div className="comment-meta">
                   {comment.page_number && (

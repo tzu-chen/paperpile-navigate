@@ -38,6 +38,8 @@ export interface Comment {
   paper_id: number;
   content: string;
   page_number: number | null;
+  selected_text: string | null;
+  position_rects: string | null;
   created_at: string;
   updated_at: string;
 }

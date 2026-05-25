@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 import Icon from './Icon';
 import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
+import { Comment, CommentPositionRect } from '../types';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -36,6 +37,14 @@ interface Props {
   onToggleImmersive?: () => void;
   jumpToPage?: number;
   onJumpApplied?: () => void;
+  onTextSelected?: (selection: {
+    text: string;
+    pageNumber: number;
+    rects: CommentPositionRect[];
+  } | null) => void;
+  onRequestAddComment?: (anchor: { x: number; y: number }) => void;
+  comments?: Comment[];
+  onDeleteComment?: (commentId: number) => void | Promise<void>;
 }
 
 // Detect mobile once — used to tune buffer sizes and canvas resolution
@@ -46,7 +55,7 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
 const canvasPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
 
-export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggleImmersive, jumpToPage, onJumpApplied }: Props) {
+export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggleImmersive, jumpToPage, onJumpApplied, onTextSelected, onRequestAddComment, comments, onDeleteComment }: Props) {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
@@ -66,6 +75,10 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const containerRef = useRef<HTMLDivElement>(null);
   const currentPageRef = useRef(1);
   const [pageInputValue, setPageInputValue] = useState('1');
+  // Stores the bounding rect of the active text selection in viewport coords.
+  // Used to position the "Add comment" popup AND the floating box that opens on click.
+  const [selectionPopup, setSelectionPopup] = useState<{ top: number; right: number; bottom: number; left: number } | null>(null);
+  const selectionPopupRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfDocRef = useRef<any>(null);
   const hasInitialScale = useRef(false);
@@ -235,6 +248,102 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     scrollToPage(clamped);
   }, [numPages, updateCurrentPage, scrollToPage]);
 
+  // Capture text selections inside the PDF and forward to the parent. Only emit
+  // on non-empty selections — clearing the selection (e.g., focusing the
+  // comment textarea) must not wipe the parent's captured snapshot.
+  useEffect(() => {
+    if (!onTextSelected && !onRequestAddComment) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const captureSelection = () => {
+      // Defer one tick so the browser finalizes the selection after mouseup/touchend.
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+        const text = sel.toString().trim();
+        if (!text) return;
+        const anchor = sel.anchorNode;
+        if (!anchor || !container.contains(anchor)) return;
+        const el = anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : (anchor as Element);
+        const pageEl = el?.closest('[data-page-number]');
+        const pageNum = pageEl ? Number(pageEl.getAttribute('data-page-number')) : NaN;
+        if (!pageEl || isNaN(pageNum)) return;
+
+        // Compute normalized rects (x,y,w,h as fractions of the page's rendered size)
+        // so underline marks scale with zoom. getClientRects() returns one rect per
+        // visual fragment (typically one per line of the selection).
+        const range = sel.getRangeAt(0);
+        const clientRects = range.getClientRects();
+        const pageWrappers = container.querySelectorAll('[data-page-number]');
+        const pageRectCache = new Map<number, DOMRect>();
+        const rects: CommentPositionRect[] = [];
+        for (let i = 0; i < clientRects.length; i++) {
+          const cr = clientRects[i];
+          if (cr.width <= 0 || cr.height <= 0) continue;
+          const cx = (cr.left + cr.right) / 2;
+          const cy = (cr.top + cr.bottom) / 2;
+          let matchedPage: number | null = null;
+          let matchedRect: DOMRect | null = null;
+          for (const wrapper of pageWrappers) {
+            const p = Number(wrapper.getAttribute('data-page-number'));
+            let pr = pageRectCache.get(p);
+            if (!pr) {
+              const pageDiv = wrapper.querySelector('.react-pdf__Page') || wrapper;
+              pr = (pageDiv as Element).getBoundingClientRect();
+              pageRectCache.set(p, pr);
+            }
+            if (cx >= pr.left && cx <= pr.right && cy >= pr.top && cy <= pr.bottom) {
+              matchedPage = p;
+              matchedRect = pr;
+              break;
+            }
+          }
+          if (matchedPage === null || !matchedRect || matchedRect.width === 0 || matchedRect.height === 0) continue;
+          rects.push({
+            page: matchedPage,
+            x: (cr.left - matchedRect.left) / matchedRect.width,
+            y: (cr.top - matchedRect.top) / matchedRect.height,
+            w: cr.width / matchedRect.width,
+            h: cr.height / matchedRect.height,
+          });
+        }
+
+        onTextSelected?.({ text, pageNumber: pageNum, rects });
+        if (onRequestAddComment) {
+          const rect = range.getBoundingClientRect();
+          if (rect.width > 0 || rect.height > 0) {
+            setSelectionPopup({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left });
+          }
+        }
+      }, 0);
+    };
+
+    container.addEventListener('mouseup', captureSelection);
+    container.addEventListener('touchend', captureSelection);
+    return () => {
+      container.removeEventListener('mouseup', captureSelection);
+      container.removeEventListener('touchend', captureSelection);
+    };
+  }, [onTextSelected, onRequestAddComment]);
+
+  // Dismiss the selection popup on scroll, page-input typing, or clicks outside it.
+  useEffect(() => {
+    if (!selectionPopup) return;
+    const container = containerRef.current;
+    const onScroll = () => setSelectionPopup(null);
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (selectionPopupRef.current?.contains(e.target as Node)) return;
+      setSelectionPopup(null);
+    };
+    container?.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => {
+      container?.removeEventListener('scroll', onScroll);
+      document.removeEventListener('mousedown', onDocMouseDown);
+    };
+  }, [selectionPopup]);
+
   // Apply externally-requested page jumps once the document is loaded.
   // Waits for numPages > 0 so a jump issued before load still lands correctly.
   useEffect(() => {
@@ -307,6 +416,30 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
 
   const zoomIn = () => setScale(s => Math.min(s + 0.2, 3));
   const zoomOut = () => setScale(s => Math.max(s - 0.2, 0.4));
+
+  // Index comments with stored position rects by page so we can render
+  // underline marks inside each visible page wrapper.
+  const annotationsByPage = useMemo(() => {
+    const map = new Map<number, Array<{ comment: Comment; rect: CommentPositionRect }>>();
+    if (!comments) return map;
+    for (const c of comments) {
+      if (!c.position_rects) continue;
+      let parsed: CommentPositionRect[];
+      try {
+        parsed = JSON.parse(c.position_rects) as CommentPositionRect[];
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed)) continue;
+      for (const r of parsed) {
+        if (typeof r?.page !== 'number') continue;
+        const list = map.get(r.page) || [];
+        list.push({ comment: c, rect: r });
+        map.set(r.page, list);
+      }
+    }
+    return map;
+  }, [comments]);
 
   const toggleOutline = useCallback(() => setOutlineOpen(o => !o), []);
   useKeyboardShortcut('pdfTocToggle', toggleOutline, outline.length > 0);
@@ -500,34 +633,98 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
             externalLinkRel="noopener noreferrer"
             onItemClick={handleItemClick}
           >
-            {Array.from({ length: numPages }, (_, i) => (
-              <div
-                key={i + 1}
-                data-page-number={i + 1}
-                className="pdf-page-wrapper"
-                style={!visiblePages.has(i + 1) && pageHeightRef.current > 0
-                  ? { height: `${pageHeightRef.current * scale}px`, minHeight: `${pageHeightRef.current * scale}px` }
-                  : undefined}
-              >
-                {visiblePages.has(i + 1) ? (
-                  <Page
-                    pageNumber={i + 1}
-                    scale={scale}
-                    devicePixelRatio={canvasPixelRatio}
-                    loading=""
-                    error={
-                      <div className="pdf-page-error">
-                        <p>Page {i + 1} failed to render</p>
-                      </div>
-                    }
-                  />
-                ) : null}
-              </div>
-            ))}
+            {Array.from({ length: numPages }, (_, i) => {
+              const pageNum = i + 1;
+              const isVisible = visiblePages.has(pageNum);
+              const pageAnnotations = annotationsByPage.get(pageNum);
+              const pageW = pageWidthRef.current > 0 ? pageWidthRef.current * scale : 0;
+              const pageH = pageHeightRef.current > 0 ? pageHeightRef.current * scale : 0;
+              return (
+                <div
+                  key={pageNum}
+                  data-page-number={pageNum}
+                  className="pdf-page-wrapper"
+                  style={!isVisible && pageHeightRef.current > 0
+                    ? { height: `${pageH}px`, minHeight: `${pageH}px` }
+                    : undefined}
+                >
+                  {isVisible ? (
+                    <Page
+                      pageNumber={pageNum}
+                      scale={scale}
+                      devicePixelRatio={canvasPixelRatio}
+                      loading=""
+                      error={
+                        <div className="pdf-page-error">
+                          <p>Page {pageNum} failed to render</p>
+                        </div>
+                      }
+                    />
+                  ) : null}
+                  {isVisible && pageAnnotations && pageAnnotations.length > 0 && pageW > 0 && pageH > 0 && (
+                    <div
+                      className="pdf-page-comment-overlay"
+                      style={{ width: pageW, height: pageH }}
+                    >
+                      {pageAnnotations.map((a, idx) => (
+                        <div
+                          key={`${a.comment.id}-${idx}`}
+                          className="pdf-comment-mark"
+                          style={{
+                            left: `${a.rect.x * 100}%`,
+                            // Sit on the text baseline — slightly above the bottom
+                            // of the line box (which includes descenders).
+                            top: `${(a.rect.y + a.rect.h * 0.78) * 100}%`,
+                            width: `${a.rect.w * 100}%`,
+                          }}
+                        >
+                          <div className="pdf-comment-tooltip">
+                            {onDeleteComment && (
+                              <button
+                                type="button"
+                                className="pdf-comment-tooltip-delete"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteComment(a.comment.id);
+                                }}
+                                title="Delete comment"
+                              >
+                                &times;
+                              </button>
+                            )}
+                            <div className="pdf-comment-tooltip-content">{a.comment.content}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </Document>
         </div>
         </div>
       </div>
+      {selectionPopup && onRequestAddComment && (
+        <div
+          ref={selectionPopupRef}
+          className="pdf-selection-popup"
+          style={{ left: (selectionPopup.left + selectionPopup.right) / 2, top: selectionPopup.top }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            className="pdf-selection-popup-btn"
+            onClick={() => {
+              onRequestAddComment({ x: selectionPopup.left, y: selectionPopup.bottom + 8 });
+              setSelectionPopup(null);
+            }}
+          >
+            <Icon name="pencil" />
+            <span>Add comment</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

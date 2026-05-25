@@ -1391,16 +1391,8 @@ input[type="color"] {
   border-color: var(--accent-color);
 }
 
-/* Immersive mode — hides header, sidebar, and PDF toolbar */
+/* Immersive mode — hides header and PDF toolbar; sidebar/panel-zone remain available */
 .paper-viewer.immersive-mode .viewer-header {
-  display: none;
-}
-
-.paper-viewer.immersive-mode .panel-zone {
-  display: none;
-}
-
-.paper-viewer.immersive-mode .viewer-sidebar {
   display: none;
 }
 
@@ -1410,6 +1402,7 @@ input[type="color"] {
 }
 
 .paper-viewer.immersive-mode .toc-zone:hover .floating-toggle-active,
+.paper-viewer.immersive-mode .panel-zone:hover .floating-toggle-active,
 .paper-viewer.immersive-mode .immersive-zone:hover .floating-toggle-active {
   opacity: 1;
 }
@@ -1428,40 +1421,75 @@ input[type="color"] {
   flex-shrink: 0;
 }
 
-.sidebar-tabs {
+/* Stacked sidebar sections: comments, chat, worldline */
+.sidebar-stack-section {
   display: flex;
-  background: var(--bg-secondary);
+  flex-direction: column;
+  min-height: 0;
   border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
+  flex: 1 1 0;
 }
 
-.sidebar-tab {
-  flex: 1;
-  padding: 8px 6px;
+.sidebar-stack-section:last-child {
+  border-bottom: none;
+}
+
+.sidebar-stack-section.collapsed {
+  flex: 0 0 auto;
+}
+
+/* Chat gets more vertical real estate by default */
+.sidebar-stack-section-grow {
+  flex: 2 1 0;
+}
+
+.sidebar-stack-section-grow.collapsed {
+  flex: 0 0 auto;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
   border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  transition: all var(--transition);
-}
-
-.sidebar-tab:hover {
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar-section-header:hover {
   background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
-.sidebar-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.sidebar-section-caret {
+  font-size: 10px;
+  width: 12px;
+  color: var(--text-muted);
 }
 
-.sidebar-content {
-  flex: 1;
+.sidebar-section-body {
+  flex: 1 1 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.sidebar-section-body-chat {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ========================
@@ -1471,6 +1499,108 @@ input[type="color"] {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.pdf-selection-popup {
+  position: fixed;
+  z-index: 300;
+  transform: translate(-50%, calc(-100% - 8px));
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 2px;
+}
+
+.pdf-selection-popup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pdf-selection-popup-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+
+.floating-comment-box {
+  position: fixed;
+  z-index: 310;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.floating-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.floating-comment-quote {
+  margin: 0;
+  padding: 4px 0 4px 10px;
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  font-style: italic;
+  max-height: 100px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.floating-comment-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.floating-comment-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.floating-comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.floating-comment-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.floating-comment-buttons {
+  display: flex;
+  gap: 6px;
 }
 
 .pdf-toolbar {
@@ -1569,9 +1699,106 @@ input[type="color"] {
 }
 
 .pdf-page-wrapper {
+  position: relative;
   display: flex;
   justify-content: center;
   padding: 8px 0;
+}
+
+/* Container sized to match the rendered page; horizontally centered like the
+   Page itself. Annotation marks inside use percentage-based positions, so they
+   scale with zoom and re-align after fit-to-width changes. */
+.pdf-page-comment-overlay {
+  position: absolute;
+  top: 8px; /* match .pdf-page-wrapper padding-top */
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.pdf-comment-mark {
+  position: absolute;
+  height: 3px;
+  pointer-events: auto;
+  cursor: help;
+}
+
+/* Wavy underline drawn via ::after so the SVG mask doesn't also clip the
+   tooltip child below. */
+.pdf-comment-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3' viewBox='0 0 6 3'%3E%3Cpath d='M0 2 Q1.5 0 3 2 T6 2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3' viewBox='0 0 6 3'%3E%3Cpath d='M0 2 Q1.5 0 3 2 T6 2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: repeat-x;
+          mask-repeat: repeat-x;
+  -webkit-mask-size: 6px 3px;
+          mask-size: 6px 3px;
+  pointer-events: none;
+}
+
+.pdf-comment-mark::before {
+  /* Slightly larger invisible hit area above the line so hover is easier. */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  bottom: -3px;
+}
+
+.pdf-comment-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  max-width: 320px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 8px 24px 8px 10px; /* extra right padding leaves room for the × */
+  font-size: 12px;
+  color: var(--text-primary);
+  display: none;
+  z-index: 10;
+}
+
+.pdf-comment-mark:hover .pdf-comment-tooltip {
+  display: block;
+}
+
+.pdf-comment-tooltip-content {
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pdf-comment-tooltip-delete {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pdf-comment-tooltip-delete:hover {
+  background: var(--bg-tertiary);
+  color: var(--danger, #e25555);
 }
 
 .pdf-page-wrapper .react-pdf__Page {
@@ -1878,6 +2105,54 @@ input[type="color"] {
 .comment-edit-actions {
   display: flex;
   gap: 6px;
+}
+
+.comment-selection-preview {
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.comment-selection-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.comment-selection-quote {
+  margin: 0;
+  padding: 4px 0 4px 10px;
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  font-style: italic;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-quote {
+  margin: 0 0 8px;
+  padding: 4px 0 4px 10px;
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-style: italic;
+  max-height: 100px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ========================

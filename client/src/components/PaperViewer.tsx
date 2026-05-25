@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SavedPaper, ArxivPaper, Comment, Tag } from '../types';
+import { SavedPaper, ArxivPaper, Comment, CommentPositionRect, Tag } from '../types';
 import * as api from '../services/api';
 import PDFViewer from './PDFViewer';
 import CommentPanel from './CommentPanel';
-import TagPanel from './TagPanel';
-import ExportPanel from './ExportPanel';
 import ChatPanel from './ChatPanel';
 import WorldlineSidebarPanel from './WorldlineSidebarPanel';
-import WorldlineInfoPanel from './WorldlineInfoPanel';
-import BatchImportPanel from './BatchImportPanel';
+import FloatingCommentBox from './FloatingCommentBox';
 import LaTeX from './LaTeX';
 import Icon from './Icon';
 import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
@@ -22,8 +19,6 @@ interface Props {
   isInLibrary: boolean;
   onSavePaper?: () => Promise<void>;
   onDeletePaper?: () => Promise<void>;
-  allTags: Tag[];
-  onTagsChanged: () => Promise<void>;
   showNotification: (msg: string) => void;
   favoriteAuthorNames: Set<string>;
   onFavoriteAuthor: (name: string) => void;
@@ -34,30 +29,38 @@ interface Props {
   browseTotalResults?: number;
   onBrowseNavigate?: (paper: ArxivPaper) => void;
   onImmersiveModeChange?: (immersive: boolean) => void;
-  onLibraryRefresh?: () => Promise<void>;
   initialPage?: number;
 }
 
-type SidePanel = 'chat' | 'comments' | 'export' | 'info' | 'worldline' | 'import';
+type SidebarSection = 'comments' | 'chat' | 'worldline';
 
-export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, allTags, onTagsChanged, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, onLibraryRefresh, initialPage }: Props) {
+export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeletePaper, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor, onOpenPaper, browsePapers, browsePageOffset = 0, browseTotalResults = 0, onBrowseNavigate, onImmersiveModeChange, initialPage }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [paperTags, setPaperTags] = useState<Tag[]>([]);
-  const [activePanel, setActivePanel] = useState<SidePanel>(isSavedPaper(paper) ? 'comments' : 'info');
+  const [collapsedSections, setCollapsedSections] = useState<Set<SidebarSection>>(new Set());
   const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
   const [jumpToPage, setJumpToPage] = useState<number | undefined>(initialPage);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingToScribe, setSendingToScribe] = useState(false);
+  const [pdfSelection, setPdfSelection] = useState<{ text: string; pageNumber: number; rects: CommentPositionRect[] } | null>(null);
+  const [floatingCommentAnchor, setFloatingCommentAnchor] = useState<{ x: number; y: number } | null>(null);
+
+  const handleRequestAddComment = useCallback((anchor: { x: number; y: number }) => {
+    setFloatingCommentAnchor(anchor);
+  }, []);
+
+  const closeFloatingComment = useCallback(() => {
+    setFloatingCommentAnchor(null);
+    setPdfSelection(null);
+  }, []);
 
   const saved = isSavedPaper(paper) ? paper : null;
   const arxivId = saved ? saved.arxiv_id : (paper as ArxivPaper).id;
   const absUrl = saved ? saved.abs_url : (paper as ArxivPaper).absUrl;
   const authors = saved ? JSON.parse(saved.authors) as string[] : (paper as ArxivPaper).authors;
   const categories = saved ? JSON.parse(saved.categories) as string[] : (paper as ArxivPaper).categories;
-  const doi = saved ? saved.doi : (paper as ArxivPaper).doi || null;
-  const journalRef = saved ? saved.journal_ref : (paper as ArxivPaper).journalRef || null;
 
   // Browse navigation
   const browseIndex = browsePapers && browsePapers.length > 0
@@ -78,6 +81,17 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
     }
   }, [paper]);
 
+  const handleDeleteComment = useCallback(async (commentId: number) => {
+    const s = isSavedPaper(paper) ? paper : null;
+    if (!s) return;
+    try {
+      await api.deleteComment(s.id, commentId);
+      await loadComments();
+    } catch {
+      showNotification('Failed to delete comment');
+    }
+  }, [paper, loadComments, showNotification]);
+
   const loadPaperTags = useCallback(async () => {
     const s = isSavedPaper(paper) ? paper : null;
     if (!s) return;
@@ -92,6 +106,8 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
   useEffect(() => {
     loadComments();
     loadPaperTags();
+    setPdfSelection(null);
+    setFloatingCommentAnchor(null);
   }, [loadComments, loadPaperTags]);
 
   // Notify parent when immersive mode changes
@@ -109,21 +125,28 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [immersiveMode]);
 
-  // When paper transitions from unsaved to saved, switch to comments tab
-  useEffect(() => {
-    if (isSavedPaper(paper)) {
-      setActivePanel(prev => prev === 'info' ? 'comments' : prev);
-    }
-  }, [paper]);
-
-  // Re-arm page jump + open comments panel whenever parent supplies a new initialPage
+  // Re-arm page jump + open sidebar whenever parent supplies a new initialPage
   useEffect(() => {
     if (initialPage !== undefined) {
       setJumpToPage(initialPage);
       setSidebarVisible(true);
-      if (isSavedPaper(paper)) setActivePanel('comments');
+      setCollapsedSections(prev => {
+        if (!prev.has('comments')) return prev;
+        const next = new Set(prev);
+        next.delete('comments');
+        return next;
+      });
     }
-  }, [initialPage, paper]);
+  }, [initialPage]);
+
+  const toggleSection = useCallback((section: SidebarSection) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }, []);
 
   const togglePanel = useCallback(() => setSidebarVisible(v => !v), []);
   useKeyboardShortcut('pdfPanelToggle', togglePanel);
@@ -301,175 +324,98 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
             onToggleImmersive={() => setImmersiveMode(m => !m)}
             jumpToPage={jumpToPage}
             onJumpApplied={() => setJumpToPage(undefined)}
+            onTextSelected={saved ? setPdfSelection : undefined}
+            onRequestAddComment={saved ? handleRequestAddComment : undefined}
+            comments={comments}
+            onDeleteComment={saved ? handleDeleteComment : undefined}
           />
-          <div className="panel-zone">
-            <button
-              className={`floating-toggle ${sidebarVisible ? 'floating-toggle-active' : ''}`}
-              onClick={() => setSidebarVisible(v => !v)}
-              title={sidebarVisible ? 'Hide panel' : 'Show panel'}
-            >
-              <Icon name="sidebar-right" />
-            </button>
-          </div>
+          {saved && (
+            <div className="panel-zone">
+              <button
+                className={`floating-toggle ${sidebarVisible ? 'floating-toggle-active' : ''}`}
+                onClick={() => setSidebarVisible(v => !v)}
+                title={sidebarVisible ? 'Hide panel' : 'Show panel'}
+              >
+                <Icon name="sidebar-right" />
+              </button>
+            </div>
+          )}
         </div>
 
         {sidebarVisible && <div className="viewer-sidebar-backdrop active" onClick={() => setSidebarVisible(false)} />}
-        {sidebarVisible && <div className="viewer-sidebar">
-          <div className="sidebar-tabs">
-            {saved && <button
-              className={`sidebar-tab ${activePanel === 'chat' ? 'active' : ''}`}
-              onClick={() => setActivePanel('chat')}
-            >
-              Chat
-            </button>}
-            {saved && <button
-              className={`sidebar-tab ${activePanel === 'comments' ? 'active' : ''}`}
-              onClick={() => setActivePanel('comments')}
-            >
-              Comments ({comments.length})
-            </button>}
-            {saved && <button
-              className={`sidebar-tab ${activePanel === 'export' ? 'active' : ''}`}
-              onClick={() => setActivePanel('export')}
-            >
-              Export
-            </button>}
+        {sidebarVisible && saved && <div className="viewer-sidebar">
+          <div className={`sidebar-stack-section ${collapsedSections.has('comments') ? 'collapsed' : ''}`}>
             <button
-              className={`sidebar-tab ${activePanel === 'info' ? 'active' : ''}`}
-              onClick={() => setActivePanel('info')}
+              className="sidebar-section-header"
+              onClick={() => toggleSection('comments')}
             >
-              Info
+              <span className="sidebar-section-caret">{collapsedSections.has('comments') ? '▸' : '▾'}</span>
+              <span>Comments ({comments.length})</span>
             </button>
-            {saved && <button
-              className={`sidebar-tab ${activePanel === 'worldline' ? 'active' : ''}`}
-              onClick={() => setActivePanel('worldline')}
-            >
-              Worldline
-            </button>}
-            <button
-              className={`sidebar-tab ${activePanel === 'import' ? 'active' : ''}`}
-              onClick={() => setActivePanel('import')}
-            >
-              Import
-            </button>
-          </div>
-
-          <div className={`sidebar-content ${activePanel === 'chat' ? 'sidebar-content-chat' : ''}`}>
-            {activePanel === 'chat' && saved && (
-              <ChatPanel
-                paper={saved}
-                showNotification={showNotification}
-              />
-            )}
-            {activePanel === 'comments' && saved && (
-              <CommentPanel
-                paperId={saved.id}
-                comments={comments}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onRefresh={loadComments}
-                showNotification={showNotification}
-              />
-            )}
-            {activePanel === 'export' && saved && (
-              <ExportPanel
-                paper={saved}
-                showNotification={showNotification}
-              />
-            )}
-            {activePanel === 'info' && (
-              <div className="info-panel">
-                {saved && (
-                  <div className="info-section">
-                    <h4>Tags</h4>
-                    <TagPanel
-                      paperId={saved.id}
-                      paperTags={paperTags}
-                      allTags={allTags}
-                      onRefresh={async () => { await loadPaperTags(); await onTagsChanged(); }}
-                      showNotification={showNotification}
-                    />
-                  </div>
-                )}
-                {saved && (
-                  <div className="info-section">
-                    <h4>Worldlines</h4>
-                    <WorldlineInfoPanel
-                      paperId={saved.id}
-                      showNotification={showNotification}
-                    />
-                  </div>
-                )}
-                <div className="info-section">
-                  <h4>Abstract</h4>
-                  <p><LaTeX>{paper.summary}</LaTeX></p>
-                </div>
-                <div className="info-section">
-                  <h4>Authors</h4>
-                  <p className="paper-authors">
-                    {authors.map((author, i) => (
-                      <span key={i}>
-                        {i > 0 && ', '}
-                        <button
-                          className={`author-name-btn ${favoriteAuthorNames.has(author) ? 'is-favorite' : ''}`}
-                          onClick={() => !favoriteAuthorNames.has(author) && onFavoriteAuthor(author)}
-                          onContextMenu={(e) => { e.preventDefault(); onSearchAuthor(author); }}
-                          title={favoriteAuthorNames.has(author) ? 'Already in favorites' : `Add ${author} to favorites | Right-click to search`}
-                        >
-                          {author}
-                        </button>
-                      </span>
-                    ))}
-                  </p>
-                </div>
-                <div className="info-section">
-                  <h4>Categories</h4>
-                  <p>{categories.join(', ')}</p>
-                </div>
-                <div className="info-section">
-                  <h4>ArXiv ID</h4>
-                  <p>{arxivId}</p>
-                </div>
-                {doi && (
-                  <div className="info-section">
-                    <h4>DOI</h4>
-                    <p>{doi}</p>
-                  </div>
-                )}
-                {journalRef && (
-                  <div className="info-section">
-                    <h4>Journal</h4>
-                    <p>{journalRef}</p>
-                  </div>
-                )}
-                <div className="info-section">
-                  <h4>Published</h4>
-                  <p>{new Date(paper.published).toLocaleDateString()}</p>
-                </div>
-                <div className="info-section">
-                  <h4>Last Updated</h4>
-                  <p>{new Date(paper.updated).toLocaleDateString()}</p>
-                </div>
+            {!collapsedSections.has('comments') && (
+              <div className="sidebar-section-body">
+                <CommentPanel
+                  paperId={saved.id}
+                  comments={comments}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onRefresh={loadComments}
+                  showNotification={showNotification}
+                  selection={pdfSelection}
+                  onClearSelection={() => setPdfSelection(null)}
+                />
               </div>
             )}
-            {activePanel === 'worldline' && saved && (
-              <WorldlineSidebarPanel
-                paper={saved}
-                onOpenPaper={onOpenPaper}
-                showNotification={showNotification}
-              />
+          </div>
+
+          <div className={`sidebar-stack-section sidebar-stack-section-grow ${collapsedSections.has('chat') ? 'collapsed' : ''}`}>
+            <button
+              className="sidebar-section-header"
+              onClick={() => toggleSection('chat')}
+            >
+              <span className="sidebar-section-caret">{collapsedSections.has('chat') ? '▸' : '▾'}</span>
+              <span>Chat</span>
+            </button>
+            {!collapsedSections.has('chat') && (
+              <div className="sidebar-section-body sidebar-section-body-chat">
+                <ChatPanel
+                  paper={saved}
+                  showNotification={showNotification}
+                />
+              </div>
             )}
-            {activePanel === 'import' && (
-              <BatchImportPanel
-                tags={allTags}
-                showNotification={showNotification}
-                onImportComplete={onLibraryRefresh || (async () => {})}
-                compact
-              />
+          </div>
+
+          <div className={`sidebar-stack-section ${collapsedSections.has('worldline') ? 'collapsed' : ''}`}>
+            <button
+              className="sidebar-section-header"
+              onClick={() => toggleSection('worldline')}
+            >
+              <span className="sidebar-section-caret">{collapsedSections.has('worldline') ? '▸' : '▾'}</span>
+              <span>Worldline</span>
+            </button>
+            {!collapsedSections.has('worldline') && (
+              <div className="sidebar-section-body">
+                <WorldlineSidebarPanel
+                  paper={saved}
+                  onOpenPaper={onOpenPaper}
+                  showNotification={showNotification}
+                />
+              </div>
             )}
           </div>
         </div>}
       </div>
+      {saved && floatingCommentAnchor && pdfSelection && (
+        <FloatingCommentBox
+          paperId={saved.id}
+          selection={pdfSelection}
+          position={floatingCommentAnchor}
+          onClose={closeFloatingComment}
+          onAdded={loadComments}
+          showNotification={showNotification}
+        />
+      )}
     </div>
   );
 }

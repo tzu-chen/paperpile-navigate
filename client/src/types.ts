@@ -38,8 +38,18 @@ export interface Comment {
   paper_id: number;
   content: string;
   page_number: number | null;
+  selected_text: string | null;
+  position_rects: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CommentPositionRect {
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface CommentWithPaper extends Comment {

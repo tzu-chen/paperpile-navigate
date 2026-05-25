@@ -37,6 +37,8 @@ export function initializeDatabase(): void {
       paper_id INTEGER NOT NULL,
       content TEXT NOT NULL,
       page_number INTEGER,
+      selected_text TEXT,
+      position_rects TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (paper_id) REFERENCES papers(id) ON DELETE CASCADE
@@ -152,6 +154,16 @@ export function initializeDatabase(): void {
       console.warn('Could not drop legacy `status` column from papers; leaving it in place:', err);
     }
   }
+
+  // Migration: add selected_text column to comments for text-selection anchoring
+  const commentColumns = db.prepare("PRAGMA table_info('comments')").all() as { name: string }[];
+  if (!commentColumns.some(c => c.name === 'selected_text')) {
+    db.exec("ALTER TABLE comments ADD COLUMN selected_text TEXT");
+  }
+  // Migration: add position_rects (JSON of normalized rects per page) for underline rendering
+  if (!commentColumns.some(c => c.name === 'position_rects')) {
+    db.exec("ALTER TABLE comments ADD COLUMN position_rects TEXT");
+  }
 }
 
 // Paper operations
@@ -226,10 +238,16 @@ export function deletePaper(id: number) {
 }
 
 // Comment operations
-export function addComment(paperId: number, content: string, pageNumber?: number) {
+export function addComment(
+  paperId: number,
+  content: string,
+  pageNumber?: number | null,
+  selectedText?: string | null,
+  positionRects?: string | null
+) {
   return db.prepare(
-    'INSERT INTO comments (paper_id, content, page_number) VALUES (?, ?, ?)'
-  ).run(paperId, content, pageNumber ?? null);
+    'INSERT INTO comments (paper_id, content, page_number, selected_text, position_rects) VALUES (?, ?, ?, ?, ?)'
+  ).run(paperId, content, pageNumber ?? null, selectedText ?? null, positionRects ?? null);
 }
 
 export function getComments(paperId: number) {
@@ -251,7 +269,8 @@ export function deleteComment(id: number) {
 export function getAllComments() {
   return db.prepare(`
     SELECT
-      c.id, c.paper_id, c.content, c.page_number, c.created_at, c.updated_at,
+      c.id, c.paper_id, c.content, c.page_number, c.selected_text, c.position_rects,
+      c.created_at, c.updated_at,
       p.arxiv_id, p.title, p.authors
     FROM comments c
     JOIN papers p ON p.id = c.paper_id

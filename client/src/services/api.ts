@@ -238,11 +238,18 @@ export async function getAllComments(): Promise<CommentWithPaper[]> {
 export async function addComment(
   paperId: number,
   content: string,
-  pageNumber?: number
+  pageNumber?: number | null,
+  selectedText?: string | null,
+  positionRects?: string | null
 ): Promise<{ id: number }> {
   return request(`/papers/${paperId}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ content, page_number: pageNumber }),
+    body: JSON.stringify({
+      content,
+      page_number: pageNumber,
+      selected_text: selectedText,
+      position_rects: positionRects,
+    }),
   });
 }
 

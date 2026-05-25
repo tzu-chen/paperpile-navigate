@@ -434,14 +434,16 @@ router.get('/:id/comments', (req: Request, res: Response) => {
 // POST /api/papers/:id/comments
 router.post('/:id/comments', (req: Request, res: Response) => {
   try {
-    const { content, page_number } = req.body;
+    const { content, page_number, selected_text, position_rects } = req.body;
     if (!content) {
       return res.status(400).json({ error: 'Content is required' });
     }
     const result = db.addComment(
       paramInt(req.params.id),
       content,
-      page_number
+      page_number,
+      selected_text,
+      position_rects
     );
     res.status(201).json({ id: result.lastInsertRowid, success: true });
   } catch (error) {

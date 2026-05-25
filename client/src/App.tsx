@@ -371,8 +371,6 @@ export default function App() {
               isInLibrary={!!selectedPaper}
               onSavePaper={previewPaper ? async () => { await handleSaveFromViewer(previewPaper); } : undefined}
               onDeletePaper={selectedPaper ? async () => { await handleDeleteFromViewer(selectedPaper); } : undefined}
-              allTags={tags}
-              onTagsChanged={loadLibrary}
               showNotification={showNotification}
               favoriteAuthorNames={favoriteAuthorNames}
               onFavoriteAuthor={handleFavoriteAuthor}
@@ -383,7 +381,6 @@ export default function App() {
               browseTotalResults={browseTotalResults}
               onBrowseNavigate={handleBrowseNavigate}
               onImmersiveModeChange={setImmersiveMode}
-              onLibraryRefresh={loadLibrary}
               initialPage={initialPaperPage}
             />
           </ErrorBoundary>
