@@ -165,6 +165,17 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
   }, [saved]);
   useKeyboardShortcut('pdfWorldlineToggle', openWorldlineNav, !!saved && !worldlineNavOpen);
 
+  const handleSavePaper = useCallback(async () => {
+    if (isInLibrary || !onSavePaper || saving) return;
+    setSaving(true);
+    try {
+      await onSavePaper();
+    } finally {
+      setSaving(false);
+    }
+  }, [isInLibrary, onSavePaper, saving]);
+  useKeyboardShortcut('pdfSavePaper', handleSavePaper, !isInLibrary && !!onSavePaper);
+
   const handleTierChange = useCallback(async (tier: number | null) => {
     if (!saved) return;
     const prev = currentTier;
@@ -322,16 +333,7 @@ export default function PaperViewer({ paper, isInLibrary, onSavePaper, onDeleteP
             ) : (
               <button
                 className="btn btn-primary btn-sm"
-                onClick={async () => {
-                  if (onSavePaper) {
-                    setSaving(true);
-                    try {
-                      await onSavePaper();
-                    } finally {
-                      setSaving(false);
-                    }
-                  }
-                }}
+                onClick={handleSavePaper}
                 disabled={saving}
               >
                 {saving ? 'Saving...' : 'Save'}

@@ -3,6 +3,7 @@ export type KeybindingAction =
   | 'pdfPanelToggle'
   | 'pdfImmersiveToggle'
   | 'pdfWorldlineToggle'
+  | 'pdfSavePaper'
   | 'pdfTierSet0'
   | 'pdfTierSet1'
   | 'pdfTierSet2'
@@ -23,6 +24,7 @@ export const KEYBINDING_META: KeybindingMeta[] = [
   { action: 'pdfPanelToggle', label: 'Toggle right panel', scope: 'PDF viewer', defaultKey: 'p' },
   { action: 'pdfImmersiveToggle', label: 'Toggle fullscreen / immersive mode', scope: 'PDF viewer', defaultKey: 'f' },
   { action: 'pdfWorldlineToggle', label: 'Open worldline navigator', scope: 'PDF viewer', defaultKey: 'w' },
+  { action: 'pdfSavePaper', label: 'Save paper to library', scope: 'PDF viewer', defaultKey: 's' },
   { action: 'pdfTierSet0', label: 'Set tier T0 (Mirror)', scope: 'PDF viewer', defaultKey: '0' },
   { action: 'pdfTierSet1', label: 'Set tier T1 (Exalted)', scope: 'PDF viewer', defaultKey: '1' },
   { action: 'pdfTierSet2', label: 'Set tier T2 (Rare)', scope: 'PDF viewer', defaultKey: '2' },
