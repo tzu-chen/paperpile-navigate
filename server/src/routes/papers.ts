@@ -17,10 +17,18 @@ function paramInt(val: string | string[]): number {
 // GET /api/papers - List all saved papers
 router.get('/', (req: Request, res: Response) => {
   try {
-    const { status, tag_id } = req.query as Record<string, string>;
+    const { status, tag_id, tier } = req.query as Record<string, string>;
+    let tierFilter: number | 'ungraded' | undefined;
+    if (tier === 'ungraded') {
+      tierFilter = 'ungraded';
+    } else if (tier !== undefined && tier !== '') {
+      const parsed = parseInt(tier, 10);
+      if (parsed >= 0 && parsed <= 4) tierFilter = parsed;
+    }
     const papers = db.getPapers({
       status,
       tag_id: tag_id ? parseInt(tag_id, 10) : undefined,
+      tier: tierFilter,
     });
     res.json(papers);
   } catch (error) {
@@ -238,6 +246,24 @@ router.post('/bulk/status', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/papers/bulk/tier
+router.post('/bulk/tier', (req: Request, res: Response) => {
+  try {
+    const { paper_ids, tier } = req.body as { paper_ids: number[]; tier: number | null };
+    if (!paper_ids || !Array.isArray(paper_ids) || paper_ids.length === 0) {
+      return res.status(400).json({ error: 'paper_ids array is required' });
+    }
+    if (tier !== null && (typeof tier !== 'number' || tier < 0 || tier > 4)) {
+      return res.status(400).json({ error: 'tier must be null or an integer 0–4' });
+    }
+    const result = db.bulkUpdateTier(paper_ids, tier);
+    res.json({ success: true, updated: result.changes });
+  } catch (error) {
+    console.error('Bulk update tier error:', error);
+    res.status(500).json({ error: 'Failed to bulk update tier' });
+  }
+});
+
 // POST /api/papers/bulk/add-tag
 router.post('/bulk/add-tag', (req: Request, res: Response) => {
   try {
@@ -338,6 +364,21 @@ router.delete('/:id/pdf', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Delete PDF error:', error);
     res.status(500).json({ error: 'Failed to delete PDF' });
+  }
+});
+
+// PATCH /api/papers/:id/tier - Update paper tier (0–4, or null to ungrade)
+router.patch('/:id/tier', (req: Request, res: Response) => {
+  try {
+    const { tier } = req.body as { tier: number | null };
+    if (tier !== null && (typeof tier !== 'number' || tier < 0 || tier > 4)) {
+      return res.status(400).json({ error: 'tier must be null or an integer 0–4' });
+    }
+    db.updatePaperTier(paramInt(req.params.id), tier);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update tier error:', error);
+    res.status(500).json({ error: 'Failed to update tier' });
   }
 });
 

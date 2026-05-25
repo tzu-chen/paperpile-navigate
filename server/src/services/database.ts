@@ -137,6 +137,10 @@ export function initializeDatabase(): void {
   if (!columns.some(c => c.name === 'pdf_path')) {
     db.exec("ALTER TABLE papers ADD COLUMN pdf_path TEXT");
   }
+  // Migration: add tier column (T0–T4, NULL = ungraded)
+  if (!columns.some(c => c.name === 'tier')) {
+    db.exec("ALTER TABLE papers ADD COLUMN tier INTEGER CHECK(tier IS NULL OR (tier >= 0 AND tier <= 4))");
+  }
 }
 
 // Paper operations
@@ -166,7 +170,7 @@ export function savePaper(paper: {
   return stmt.run(paper);
 }
 
-export function getPapers(options?: { status?: string; tag_id?: number }) {
+export function getPapers(options?: { status?: string; tag_id?: number; tier?: number | 'ungraded' }) {
   if (options?.tag_id) {
     return db.prepare(`
       SELECT p.* FROM papers p
@@ -177,6 +181,12 @@ export function getPapers(options?: { status?: string; tag_id?: number }) {
   }
   if (options?.status) {
     return db.prepare('SELECT * FROM papers WHERE status = ? ORDER BY added_at DESC').all(options.status);
+  }
+  if (options?.tier === 'ungraded') {
+    return db.prepare('SELECT * FROM papers WHERE tier IS NULL ORDER BY added_at DESC').all();
+  }
+  if (typeof options?.tier === 'number') {
+    return db.prepare('SELECT * FROM papers WHERE tier = ? ORDER BY added_at DESC').all(options.tier);
   }
   return db.prepare('SELECT * FROM papers ORDER BY added_at DESC').all();
 }
@@ -191,6 +201,16 @@ export function getPaperByArxivId(arxivId: string) {
 
 export function updatePaperStatus(id: number, status: string) {
   return db.prepare('UPDATE papers SET status = ? WHERE id = ?').run(status, id);
+}
+
+export function updatePaperTier(id: number, tier: number | null) {
+  return db.prepare('UPDATE papers SET tier = ? WHERE id = ?').run(tier, id);
+}
+
+export function bulkUpdateTier(paperIds: number[], tier: number | null) {
+  if (paperIds.length === 0) return { changes: 0 };
+  const placeholders = paperIds.map(() => '?').join(',');
+  return db.prepare(`UPDATE papers SET tier = ? WHERE id IN (${placeholders})`).run(tier, ...paperIds);
 }
 
 export function deletePaper(id: number) {

@@ -30,6 +30,7 @@ export interface SavedPaper {
   added_at: string;
   status: 'new' | 'reading' | 'reviewed' | 'exported';
   pdf_path: string | null;
+  tier: number | null;
 }
 
 export interface Comment {

@@ -4787,3 +4787,304 @@ input[type="color"] {
     display: block;
   }
 }
+
+/* ========================
+   Paper Tier
+   ======================== */
+.paper-card.library-card {
+  position: relative;
+  padding-left: 60px;
+}
+
+.paper-card.library-card .paper-card-body {
+  min-width: 0;
+}
+
+.paper-tier-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 44px;
+  display: flex;
+  align-items: stretch;
+  border-right: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-tertiary) 35%, transparent);
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+
+.tier-select {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  padding: 0 2px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  letter-spacing: 0.5px;
+  transition: background var(--transition), color var(--transition);
+}
+
+.tier-select:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.tier-select:focus {
+  outline: none;
+}
+
+.tier-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* Tier-specific accent colors on the marker text */
+.tier-select-0 { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
+.tier-select-1 { color: #c084fc; }
+.tier-select-2 { color: #60a5fa; }
+.tier-select-3 { color: #34d399; }
+.tier-select-4 { color: #94a3b8; }
+.tier-select-ungraded { color: var(--text-muted); opacity: 0.5; }
+
+/* Non-T0 tier: tint the marker column subtly */
+.paper-card.library-card.tier-1 .paper-tier-marker { background: color-mix(in srgb, #c084fc 12%, transparent); border-right-color: color-mix(in srgb, #c084fc 30%, var(--border-color)); }
+.paper-card.library-card.tier-2 .paper-tier-marker { background: color-mix(in srgb, #60a5fa 12%, transparent); border-right-color: color-mix(in srgb, #60a5fa 30%, var(--border-color)); }
+.paper-card.library-card.tier-3 .paper-tier-marker { background: color-mix(in srgb, #34d399 12%, transparent); border-right-color: color-mix(in srgb, #34d399 30%, var(--border-color)); }
+.paper-card.library-card.tier-4 .paper-tier-marker { background: color-mix(in srgb, #94a3b8 12%, transparent); }
+
+/* T0 — golden decorated frame */
+@keyframes tier0-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.paper-card.library-card.tier-0 {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
+    linear-gradient(120deg, #fcd34d, #fbbf24, #f59e0b, #fde68a, #fbbf24, #d97706) border-box;
+  background-size: 100% 100%, 300% 300%;
+  animation: tier0-shimmer 8s ease-in-out infinite;
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.25),
+    0 0 18px rgba(251, 191, 36, 0.28),
+    inset 0 0 24px rgba(251, 191, 36, 0.08);
+}
+
+.paper-card.library-card.tier-0:hover {
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.4),
+    0 0 26px rgba(251, 191, 36, 0.45),
+    inset 0 0 28px rgba(251, 191, 36, 0.12);
+}
+
+.paper-card.library-card.tier-0 .paper-tier-marker {
+  background: linear-gradient(180deg,
+    rgba(251, 191, 36, 0.28) 0%,
+    rgba(245, 158, 11, 0.22) 50%,
+    rgba(251, 191, 36, 0.28) 100%);
+  border-right-color: rgba(251, 191, 36, 0.55);
+}
+
+.paper-card.library-card.tier-0 .tier-select {
+  color: #fbbf24;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+}
+
+.paper-card.library-card.tier-0 .paper-title {
+  background: linear-gradient(90deg, #fcd34d, #f59e0b 70%, var(--text-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Decorative corner sparkles on T0 cards */
+.paper-card.library-card.tier-0::before,
+.paper-card.library-card.tier-0::after {
+  content: '✦';
+  position: absolute;
+  color: #fde68a;
+  font-size: 10px;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.9);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.paper-card.library-card.tier-0::before {
+  top: 4px;
+  right: 8px;
+}
+
+.paper-card.library-card.tier-0::after {
+  bottom: 4px;
+  right: 8px;
+}
+
+/* Sidebar tier rows */
+.sidebar-item-tier {
+  font-variant-numeric: tabular-nums;
+}
+
+.tier-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 18px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.tier-dot-0 { background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #422006; box-shadow: 0 0 6px rgba(251, 191, 36, 0.5); }
+.tier-dot-1 { background: #c084fc; color: #1e1b4b; }
+.tier-dot-2 { background: #60a5fa; color: #0c1d3a; }
+.tier-dot-3 { background: #34d399; color: #052e1f; }
+.tier-dot-4 { background: #94a3b8; color: #0f172a; }
+.tier-dot-ungraded {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+}
+
+/* Light theme tweaks */
+:root[data-theme-type="light"] .paper-card.library-card.tier-0 {
+  box-shadow:
+    0 0 0 1px rgba(217, 119, 6, 0.35),
+    0 0 16px rgba(217, 119, 6, 0.25),
+    inset 0 0 20px rgba(251, 191, 36, 0.10);
+}
+
+:root[data-theme-type="light"] .paper-card.library-card.tier-0 .tier-select,
+:root[data-theme-type="light"] .tier-select-0 {
+  color: #b45309;
+  text-shadow: 0 0 4px rgba(217, 119, 6, 0.35);
+}
+
+/* Sidebar section title with help button */
+.sidebar-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sidebar-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-right: 16px;
+}
+
+.sidebar-help-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Tier rubric modal */
+.rubric-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  width: 560px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
+.rubric-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rubric-modal-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rubric-modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rubric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.rubric-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rubric-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rubric-row-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.rubric-row-t0 {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: color-mix(in srgb, #fbbf24 8%, var(--bg-primary));
+  box-shadow: inset 0 0 18px rgba(251, 191, 36, 0.08);
+}
+
+.rubric-row-t0 .rubric-row-name {
+  background: linear-gradient(90deg, #fcd34d, #f59e0b 70%, var(--text-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:root[data-theme-type="light"] .rubric-row-t0 {
+  border-color: rgba(217, 119, 6, 0.45);
+}

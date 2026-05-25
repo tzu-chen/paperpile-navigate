@@ -72,10 +72,12 @@ export function getPdfProxyUrl(arxivId: string): string {
 export async function getSavedPapers(filters?: {
   status?: string;
   tag_id?: number;
+  tier?: number | 'ungraded';
 }): Promise<SavedPaper[]> {
   const qs = new URLSearchParams();
   if (filters?.status) qs.set('status', filters.status);
   if (filters?.tag_id) qs.set('tag_id', String(filters.tag_id));
+  if (filters?.tier !== undefined) qs.set('tier', String(filters.tier));
   const query = qs.toString();
   return request(`/papers${query ? `?${query}` : ''}`);
 }
@@ -127,6 +129,23 @@ export async function updatePaperStatus(id: number, status: string): Promise<voi
   await request(`/papers/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
+  });
+}
+
+export async function updatePaperTier(id: number, tier: number | null): Promise<void> {
+  await request(`/papers/${id}/tier`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tier }),
+  });
+}
+
+export async function bulkUpdateTier(paperIds: number[], tier: number | null): Promise<{
+  success: boolean;
+  updated: number;
+}> {
+  return request('/papers/bulk/tier', {
+    method: 'POST',
+    body: JSON.stringify({ paper_ids: paperIds, tier }),
   });
 }
 

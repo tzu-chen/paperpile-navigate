@@ -29,11 +29,51 @@ const STATUS_COLORS: Record<string, string> = {
   exported: '#8b5cf6',
 };
 
+const TIER_LABELS: Record<number, string> = {
+  0: 'T0',
+  1: 'T1',
+  2: 'T2',
+  3: 'T3',
+  4: 'T4',
+};
+
+const TIER_RUBRIC: { tier: string; name: string; body: string }[] = [
+  {
+    tier: 'T0',
+    name: 'Mirror',
+    body: "Reshaped the field. If you removed this paper, a chunk of subsequent work doesn't exist or looks very different. Decade+ of citations, named techniques, textbook entry. Polish is irrelevant at this tier — the idea carries it. Expect <1% of saves.",
+  },
+  {
+    tier: 'T1',
+    name: 'Exalted',
+    body: "Major contribution. Introduced a technique, framework, or result that's now standard in a subfield. Heavily cited, well-written, you'd hand it to someone entering the area. Not civilization-altering, but the subfield genuinely pivoted. Roughly the top ~5%.",
+  },
+  {
+    tier: 'T2',
+    name: 'Rare',
+    body: 'Solid, important work you actively want to remember. Either (a) a clean novel result, (b) a definitive survey/benchmark, or (c) a paper that changed your thinking even if the field shrugged. Polish matters here — a T2 should be worth re-reading. ~15–20%.',
+  },
+  {
+    tier: 'T3',
+    name: 'Magic',
+    body: "Competent contribution. Fills in a gap, replicates with a twist, useful negative result, or a well-executed application. You're glad you read it; you probably won't revisit. The bulk of decent papers. ~50%.",
+  },
+  {
+    tier: 'T4',
+    name: 'Normal',
+    body: 'Minor or narrow. Incremental, niche, or only mattered for one citation you needed. Worth keeping for completeness, not for re-reading. ~25%.',
+  },
+];
+
+type TierFilter = number | 'ungraded' | null;
+
 export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor }: Props) {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterTag, setFilterTag] = useState<number | null>(null);
   const [filterWorldline, setFilterWorldline] = useState<number | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterTier, setFilterTier] = useState<TierFilter>(null);
+  const [showTierRubric, setShowTierRubric] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#6366f1');
@@ -109,7 +149,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   useEffect(() => {
     setSelectedPaperIds(new Set());
     setSelectMode(false);
-  }, [filterStatus, filterTag, filterWorldline, filterCategory, searchTerm]);
+  }, [filterStatus, filterTag, filterWorldline, filterCategory, filterTier, searchTerm]);
 
   // Compute unique categories from all papers for the filter dropdown
   const availableCategories = useMemo(() => {
@@ -138,6 +178,13 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
     if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
     if (filterStatus && p.status !== filterStatus) return false;
+    if (filterTier !== null) {
+      if (filterTier === 'ungraded') {
+        if (p.tier !== null && p.tier !== undefined) return false;
+      } else if (p.tier !== filterTier) {
+        return false;
+      }
+    }
     if (filterCategory) {
       try {
         const cats = JSON.parse(p.categories) as string[];
@@ -200,6 +247,31 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
       await onRefresh();
     } catch {
       showNotification('Failed to update status');
+    }
+  }
+
+  async function handleTierChange(paper: SavedPaper, tier: number | null) {
+    try {
+      await api.updatePaperTier(paper.id, tier);
+      await onRefresh();
+    } catch {
+      showNotification('Failed to update tier');
+    }
+  }
+
+  async function handleBulkTierChange(tier: number | null) {
+    setBulkLoading(true);
+    setBulkAction('Updating tier');
+    try {
+      const result = await api.bulkUpdateTier(Array.from(selectedPaperIds), tier);
+      showNotification(`Updated tier for ${result.updated} paper(s)`);
+      exitSelectMode();
+      await onRefresh();
+    } catch {
+      showNotification('Failed to update tier');
+    } finally {
+      setBulkLoading(false);
+      setBulkAction(null);
     }
   }
 
@@ -477,7 +549,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     }
   }
 
-  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || filterCategory !== '' || searchTerm !== '';
+  const hasActiveFilters = filterStatus !== '' || filterTag !== null || filterWorldline !== null || filterCategory !== '' || filterTier !== null || searchTerm !== '';
 
 
   return (
@@ -505,6 +577,44 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
             ))}
           </div>
         )}
+
+        <div className="sidebar-section">
+          <h4 className="sidebar-section-title sidebar-section-title-row">
+            <span>Tiers</span>
+            <button
+              type="button"
+              className="sidebar-help-btn"
+              onClick={() => setShowTierRubric(true)}
+              title="Tiering rubric"
+              aria-label="Show tiering rubric"
+            >
+              ?
+            </button>
+          </h4>
+          <button
+            className={`sidebar-item${filterTier === null ? ' active' : ''}`}
+            onClick={() => setFilterTier(null)}
+          >
+            All
+          </button>
+          {[0, 1, 2, 3, 4].map(t => (
+            <button
+              key={t}
+              className={`sidebar-item sidebar-item-tier sidebar-item-tier-${t}${filterTier === t ? ' active' : ''}`}
+              onClick={() => setFilterTier(filterTier === t ? null : t)}
+              title={t === 0 ? 'Groundbreaking' : t === 4 ? 'Skim' : `Tier ${t}`}
+            >
+              <span className={`tier-dot tier-dot-${t}`}>{TIER_LABELS[t]}</span>
+            </button>
+          ))}
+          <button
+            className={`sidebar-item${filterTier === 'ungraded' ? ' active' : ''}`}
+            onClick={() => setFilterTier(filterTier === 'ungraded' ? null : 'ungraded')}
+            title="Ungraded"
+          >
+            <span className="tier-dot tier-dot-ungraded">—</span>
+          </button>
+        </div>
 
         <div className="sidebar-section">
           <h4 className="sidebar-section-title">Tags</h4>
@@ -822,6 +932,24 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
               ))}
             </select>
             <select
+              onChange={e => {
+                if (e.target.value === '') return;
+                const v = e.target.value;
+                handleBulkTierChange(v === 'ungraded' ? null : parseInt(v, 10));
+                e.target.value = '';
+              }}
+              defaultValue=""
+              disabled={bulkLoading}
+            >
+              <option value="">Set Tier...</option>
+              <option value="0">T0 — Groundbreaking</option>
+              <option value="1">T1</option>
+              <option value="2">T2</option>
+              <option value="3">T3</option>
+              <option value="4">T4</option>
+              <option value="ungraded">Ungrade</option>
+            </select>
+            <select
               onChange={e => { if (e.target.value) handleBulkAddTag(parseInt(e.target.value, 10)); e.target.value = ''; }}
               defaultValue=""
               disabled={bulkLoading}
@@ -863,12 +991,34 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
               const authors = JSON.parse(paper.authors) as string[];
               const categories = JSON.parse(paper.categories) as string[];
 
+              const tierValue = paper.tier ?? null;
+              const tierClass = tierValue !== null ? ` tier-${tierValue}` : ' tier-ungraded';
+
               return (
                 <div
                   key={paper.id}
-                  className={`paper-card library-card${selectedPaperIds.has(paper.id) ? ' selected' : ''}`}
+                  className={`paper-card library-card${tierClass}${selectedPaperIds.has(paper.id) ? ' selected' : ''}`}
                   onClick={e => handleCardClick(paper, e)}
                 >
+                  <div className="paper-tier-marker" onClick={e => e.stopPropagation()}>
+                    <select
+                      className={`tier-select tier-select-${tierValue ?? 'ungraded'}`}
+                      value={tierValue === null ? '' : String(tierValue)}
+                      onChange={e => {
+                        const v = e.target.value;
+                        handleTierChange(paper, v === '' ? null : parseInt(v, 10));
+                      }}
+                      title={tierValue === null ? 'Ungraded — click to grade' : `${TIER_LABELS[tierValue]} — click to change`}
+                    >
+                      <option value="">—</option>
+                      <option value="0">T0</option>
+                      <option value="1">T1</option>
+                      <option value="2">T2</option>
+                      <option value="3">T3</option>
+                      <option value="4">T4</option>
+                    </select>
+                  </div>
+                  <div className="paper-card-body">
                   <div className="paper-card-header">
                     <div className="paper-select-title">
                       {selectMode && (
@@ -936,12 +1086,51 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
                       {paper.pdf_path ? 'PDF' : 'No PDF'}
                     </span>
                   </div>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Tier rubric modal */}
+      {showTierRubric && (
+        <div
+          className="settings-overlay"
+          onClick={() => setShowTierRubric(false)}
+        >
+          <div
+            className="rubric-modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-label="Tiering rubric"
+          >
+            <div className="rubric-modal-header">
+              <h2>Tiering rubric</h2>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setShowTierRubric(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="rubric-modal-body">
+              {TIER_RUBRIC.map(entry => (
+                <div key={entry.tier} className={`rubric-row rubric-row-${entry.tier.toLowerCase()}`}>
+                  <div className="rubric-row-head">
+                    <span className={`tier-dot tier-dot-${entry.tier.slice(1)}`}>{entry.tier}</span>
+                    <span className="rubric-row-name">{entry.name}</span>
+                  </div>
+                  <p className="rubric-row-body">{entry.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tag context menu */}
       {tagContextMenu && (
