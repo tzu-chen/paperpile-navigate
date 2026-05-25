@@ -123,6 +123,7 @@ export default function App() {
     setInitialPaperPage(page);
     setBrowsePapers([]);
     setViewMode('viewer');
+    api.markPaperViewed(paper.id).then(loadLibrary).catch(() => {});
   };
 
   const handleOpenArxivPaper = (paper: ArxivPaper) => {
@@ -135,6 +136,7 @@ export default function App() {
     if (existing) {
       setSelectedPaper(existing);
       setPreviewPaper(null);
+      api.markPaperViewed(existing.id).then(loadLibrary).catch(() => {});
     } else {
       setPreviewPaper(paper);
       setSelectedPaper(null);

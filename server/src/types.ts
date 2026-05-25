@@ -30,6 +30,7 @@ export interface SavedPaper {
   added_at: string;
   pdf_path: string | null;
   tier: number | null;
+  last_viewed_at: string | null;
 }
 
 export interface Comment {

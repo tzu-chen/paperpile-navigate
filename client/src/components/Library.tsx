@@ -3,6 +3,7 @@ import { SavedPaper, Tag, Worldline } from '../types';
 import * as api from '../services/api';
 import LaTeX from './LaTeX';
 import ImportPanel from './ImportPanel';
+import Icon from './Icon';
 
 interface Props {
   papers: SavedPaper[];
@@ -62,6 +63,7 @@ const TIER_RUBRIC: { tier: string; name: string; body: string }[] = [
 ];
 
 type TierFilter = number | 'ungraded' | null;
+type SortMode = 'viewed' | 'added';
 
 export default function Library({ papers, tags, onOpenPaper, onRefresh, showNotification, favoriteAuthorNames, onFavoriteAuthor, onSearchAuthor }: Props) {
   const [filterTag, setFilterTag] = useState<number | null>(null);
@@ -69,6 +71,7 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
   const [filterTier, setFilterTier] = useState<TierFilter>(null);
   const [showTierRubric, setShowTierRubric] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('viewed');
   const [newTagName, setNewTagName] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
   const [taggedPaperIds, setTaggedPaperIds] = useState<Set<number> | null>(null);
@@ -141,24 +144,38 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
     setAnchorPaperId(null);
   }, [filterTag, filterWorldline, filterTier, searchTerm]);
 
-  const filteredPapers = papers.filter(p => {
-    if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
-    if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
-    if (filterTier !== null) {
-      if (filterTier === 'ungraded') {
-        if (p.tier !== null && p.tier !== undefined) return false;
-      } else if (p.tier !== filterTier) {
-        return false;
+  const filteredPapers = papers
+    .filter(p => {
+      if (taggedPaperIds !== null && !taggedPaperIds.has(p.id)) return false;
+      if (worldlinePaperIds !== null && !worldlinePaperIds.has(p.id)) return false;
+      if (filterTier !== null) {
+        if (filterTier === 'ungraded') {
+          if (p.tier !== null && p.tier !== undefined) return false;
+        } else if (p.tier !== filterTier) {
+          return false;
+        }
       }
-    }
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      const matchTitle = p.title.toLowerCase().includes(term);
-      const matchAuthors = p.authors.toLowerCase().includes(term);
-      if (!matchTitle && !matchAuthors) return false;
-    }
-    return true;
-  });
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matchTitle = p.title.toLowerCase().includes(term);
+        const matchAuthors = p.authors.toLowerCase().includes(term);
+        if (!matchTitle && !matchAuthors) return false;
+      }
+      return true;
+    })
+    .slice()
+    .sort((a, b) => {
+      if (sortMode === 'viewed') {
+        // Nulls (never viewed) sort to the bottom, then fall back to added_at desc.
+        const av = a.last_viewed_at;
+        const bv = b.last_viewed_at;
+        if (av && bv) return bv.localeCompare(av);
+        if (av) return -1;
+        if (bv) return 1;
+        return (b.added_at || '').localeCompare(a.added_at || '');
+      }
+      return (b.added_at || '').localeCompare(a.added_at || '');
+    });
 
   // Selection helpers
   function clearSelection() {
@@ -620,6 +637,15 @@ export default function Library({ papers, tags, onOpenPaper, onRefresh, showNoti
         <div className="library-controls">
           <div className="control-row">
             <div className="control-group search-group">
+              <button
+                type="button"
+                className="sort-toggle-icon"
+                onClick={() => setSortMode(sortMode === 'viewed' ? 'added' : 'viewed')}
+                title={sortMode === 'viewed' ? 'Sort: last viewed (click to switch to last added)' : 'Sort: last added (click to switch to last viewed)'}
+                aria-label={`Sort by ${sortMode === 'viewed' ? 'last viewed' : 'last added'}`}
+              >
+                <Icon name={sortMode === 'viewed' ? 'eye' : 'plus'} size="14px" />
+              </button>
               <input
                 type="text"
                 placeholder="Filter papers by title or author..."

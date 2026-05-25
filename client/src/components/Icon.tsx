@@ -22,7 +22,9 @@ type IconName =
   | 'chat'
   | 'arrow-left'
   | 'sidebar-left'
-  | 'sidebar-right';
+  | 'sidebar-right'
+  | 'eye'
+  | 'plus';
 
 interface IconProps {
   name: IconName;
@@ -106,6 +108,15 @@ const paths: Record<IconName, React.ReactNode> = {
       <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
       <line x1="10" y1="2" x2="10" y2="14" stroke="currentColor" strokeWidth="1.2" />
     </>
+  ),
+  eye: (
+    <>
+      <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" fill="none" />
+    </>
+  ),
+  plus: (
+    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
   ),
 };
 

@@ -130,6 +130,10 @@ export async function updatePaperTier(id: number, tier: number | null): Promise<
   });
 }
 
+export async function markPaperViewed(id: number): Promise<void> {
+  await request(`/papers/${id}/view`, { method: 'POST' });
+}
+
 export async function bulkUpdateTier(paperIds: number[], tier: number | null): Promise<{
   success: boolean;
   updated: number;

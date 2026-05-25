@@ -140,6 +140,10 @@ export function initializeDatabase(): void {
   if (!columns.some(c => c.name === 'tier')) {
     db.exec("ALTER TABLE papers ADD COLUMN tier INTEGER CHECK(tier IS NULL OR (tier >= 0 AND tier <= 4))");
   }
+  // Migration: add last_viewed_at column for "last viewed" sort
+  if (!columns.some(c => c.name === 'last_viewed_at')) {
+    db.exec("ALTER TABLE papers ADD COLUMN last_viewed_at TEXT");
+  }
   // Migration: drop legacy status column (requires SQLite 3.35+)
   if (columns.some(c => c.name === 'status')) {
     try {
@@ -205,6 +209,10 @@ export function getPaperByArxivId(arxivId: string) {
 
 export function updatePaperTier(id: number, tier: number | null) {
   return db.prepare('UPDATE papers SET tier = ? WHERE id = ?').run(tier, id);
+}
+
+export function touchPaperLastViewed(id: number) {
+  return db.prepare("UPDATE papers SET last_viewed_at = datetime('now') WHERE id = ?").run(id);
 }
 
 export function bulkUpdateTier(paperIds: number[], tier: number | null) {

@@ -373,6 +373,21 @@ router.delete('/:id/pdf', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/papers/:id/view - Mark a paper as viewed (updates last_viewed_at)
+router.post('/:id/view', (req: Request, res: Response) => {
+  try {
+    const paper = db.getPaper(paramInt(req.params.id));
+    if (!paper) {
+      return res.status(404).json({ error: 'Paper not found' });
+    }
+    db.touchPaperLastViewed(paramInt(req.params.id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark paper viewed error:', error);
+    res.status(500).json({ error: 'Failed to mark paper viewed' });
+  }
+});
+
 // PATCH /api/papers/:id/tier - Update paper tier (0–4, or null to ungrade)
 router.patch('/:id/tier', (req: Request, res: Response) => {
   try {
