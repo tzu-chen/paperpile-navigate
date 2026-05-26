@@ -1659,7 +1659,7 @@ input[type="color"] {
 .floating-comment-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -1789,41 +1789,59 @@ input[type="color"] {
 
 .pdf-comment-mark {
   position: absolute;
-  height: 3px;
   pointer-events: auto;
-  cursor: help;
+  cursor: pointer;
+  line-height: 1;
 }
 
-/* Wavy underline drawn via ::after so the SVG mask doesn't also clip the
-   tooltip child below. */
-.pdf-comment-mark::after {
-  content: '';
+/* Highlight rendered as a child element so mix-blend-mode applies only to
+   the background bar, not to the tooltip (which would otherwise also get
+   multiplied with the page underneath). */
+.pdf-comment-mark-bg {
   position: absolute;
   inset: 0;
-  background: var(--accent);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3' viewBox='0 0 6 3'%3E%3Cpath d='M0 2 Q1.5 0 3 2 T6 2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
-          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3' viewBox='0 0 6 3'%3E%3Cpath d='M0 2 Q1.5 0 3 2 T6 2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
-  -webkit-mask-repeat: repeat-x;
-          mask-repeat: repeat-x;
-  -webkit-mask-size: 6px 3px;
-          mask-size: 6px 3px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
-.pdf-comment-mark::before {
-  /* Slightly larger invisible hit area above the line so hover is easier. */
-  content: '';
+/* Bracket at the start of the quoted passage. */
+.pdf-comment-mark--first::before {
+  content: '[';
   position: absolute;
-  left: 0;
-  right: 0;
-  top: -6px;
-  bottom: -3px;
+  right: 100%;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 0.7em;
+  font-weight: 700;
+  color: var(--accent);
+  padding-right: 1px;
+  pointer-events: none;
+}
+
+/* Bracket at the end of the quoted passage. */
+.pdf-comment-mark--last::after {
+  content: ']';
+  position: absolute;
+  left: 100%;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 0.7em;
+  font-weight: 700;
+  color: var(--accent);
+  padding-left: 1px;
+  pointer-events: none;
 }
 
 .pdf-comment-tooltip {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
+  /* left and bottom are set inline so the tooltip anchors to the first rect
+     of the comment regardless of which line the user hovered. */
   min-width: 200px;
   max-width: 320px;
   background: var(--bg-primary);
@@ -1837,7 +1855,19 @@ input[type="color"] {
   z-index: 10;
 }
 
-.pdf-comment-mark:hover .pdf-comment-tooltip {
+/* Invisible bridge fills the 6px gap below the tooltip so :hover doesn't
+   lapse when the mouse crosses from a highlight up into the tooltip. */
+.pdf-comment-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 6px;
+}
+
+.pdf-comment-group:hover .pdf-comment-tooltip,
+.pdf-comment-group--pinned .pdf-comment-tooltip {
   display: block;
 }
 

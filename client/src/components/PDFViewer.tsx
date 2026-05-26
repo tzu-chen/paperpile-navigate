@@ -69,6 +69,48 @@ const MAX_CANVAS_PIXEL_RATIO = 3;
 // PDF in their OS's native viewer instead.
 const MOBILE_PDF_SIZE_LIMIT = 12 * 1024 * 1024;
 
+// PDF.js's text layer is one <span> per text item, so a Range across multiple
+// lines emits many client rects that often stack on the same visual line.
+// Group rects whose vertical centers are within half a line height of each
+// other into one rect per line (union of their bounding boxes), then clamp
+// heights so adjacent lines don't overlap.
+function mergeLineRects(rects: CommentPositionRect[]): CommentPositionRect[] {
+  if (rects.length === 0) return [];
+  const sorted = [...rects].sort((a, b) => a.y - b.y);
+  type Group = { top: number; bottom: number; left: number; right: number; page: number };
+  const groups: Group[] = [];
+  for (const r of sorted) {
+    const last = groups[groups.length - 1];
+    if (last) {
+      const lastCenter = (last.top + last.bottom) / 2;
+      const rCenter = r.y + r.h / 2;
+      const tolerance = Math.min(r.h, last.bottom - last.top) * 0.5;
+      if (Math.abs(rCenter - lastCenter) < tolerance) {
+        last.top = Math.min(last.top, r.y);
+        last.bottom = Math.max(last.bottom, r.y + r.h);
+        last.left = Math.min(last.left, r.x);
+        last.right = Math.max(last.right, r.x + r.w);
+        continue;
+      }
+    }
+    groups.push({ top: r.y, bottom: r.y + r.h, left: r.x, right: r.x + r.w, page: r.page });
+  }
+  const merged: CommentPositionRect[] = groups.map(g => ({
+    page: g.page,
+    x: g.left,
+    y: g.top,
+    w: g.right - g.left,
+    h: g.bottom - g.top,
+  }));
+  for (let i = 0; i < merged.length - 1; i++) {
+    const nextTop = merged[i + 1].y;
+    if (merged[i].y + merged[i].h > nextTop) {
+      merged[i].h = Math.max(0, nextTop - merged[i].y);
+    }
+  }
+  return merged;
+}
+
 
 export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggleImmersive, jumpToPage, onJumpApplied, onTextSelected, onRequestAddComment, comments, onDeleteComment }: Props) {
   const [numPages, setNumPages] = useState(0);
@@ -87,6 +129,9 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
     return localStorage.getItem('pdfDarkTheme') !== null;
   });
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set([1]));
+  // Tooltip pinning: a click on any highlight of a comment pins that
+  // comment's tooltip open; clicking again unpins. Hover still works.
+  const [pinnedCommentId, setPinnedCommentId] = useState<number | null>(null);
   // Mobile-only size guard. 'pending' blocks rendering until the HEAD probe
   // returns; 'large' surfaces a confirmation UI before we hand a multi-hundred-
   // megabyte PDF to pdf.js (which can OOM-kill the tab on iPad Safari).
@@ -585,10 +630,20 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
   const zoomIn = () => setScale(s => Math.min(s + 0.2, 3));
   const zoomOut = () => setScale(s => Math.max(s - 0.2, 0.4));
 
-  // Index comments with stored position rects by page so we can render
-  // underline marks inside each visible page wrapper.
+  // Index comments by page as one group per comment per page. Each group
+  // owns all of its merged per-line rects plus a single tooltip anchored to
+  // the first rect — so hovering different lines of the same comment never
+  // moves the tooltip, and we never render duplicate tooltips. PDF.js's text
+  // layer emits one rect per text span; mergeLineRects collapses those into
+  // one rect per line so highlights don't compound into darker bands.
   const annotationsByPage = useMemo(() => {
-    const map = new Map<number, Array<{ comment: Comment; rect: CommentPositionRect }>>();
+    type Group = {
+      comment: Comment;
+      rects: CommentPositionRect[];
+      hasFirst: boolean; // contains the very first rect → leading [ bracket
+      hasLast: boolean;  // contains the very last rect → trailing ] bracket
+    };
+    const map = new Map<number, Group[]>();
     if (!comments) return map;
     for (const c of comments) {
       if (!c.position_rects) continue;
@@ -598,12 +653,32 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
       } catch {
         continue;
       }
-      if (!Array.isArray(parsed)) continue;
+      if (!Array.isArray(parsed) || parsed.length === 0) continue;
+
+      const byPage = new Map<number, CommentPositionRect[]>();
       for (const r of parsed) {
         if (typeof r?.page !== 'number') continue;
-        const list = map.get(r.page) || [];
-        list.push({ comment: c, rect: r });
-        map.set(r.page, list);
+        const list = byPage.get(r.page) || [];
+        list.push(r);
+        byPage.set(r.page, list);
+      }
+
+      const pageNums = Array.from(byPage.keys()).sort((a, b) => a - b);
+      if (pageNums.length === 0) continue;
+      const minPage = pageNums[0];
+      const maxPage = pageNums[pageNums.length - 1];
+
+      for (const pageNum of pageNums) {
+        const merged = mergeLineRects(byPage.get(pageNum)!);
+        if (merged.length === 0) continue;
+        const list = map.get(pageNum) || [];
+        list.push({
+          comment: c,
+          rects: merged,
+          hasFirst: pageNum === minPage,
+          hasLast: pageNum === maxPage,
+        });
+        map.set(pageNum, list);
       }
     }
     return map;
@@ -871,36 +946,67 @@ export default function PDFViewer({ pdfUrl, onPageChange, immersiveMode, onToggl
                       className="pdf-page-comment-overlay"
                       style={{ width: pageW, height: pageH }}
                     >
-                      {pageAnnotations.map((a, idx) => (
-                        <div
-                          key={`${a.comment.id}-${idx}`}
-                          className="pdf-comment-mark"
-                          style={{
-                            left: `${a.rect.x * 100}%`,
-                            // Sit on the text baseline — slightly above the bottom
-                            // of the line box (which includes descenders).
-                            top: `${(a.rect.y + a.rect.h * 0.78) * 100}%`,
-                            width: `${a.rect.w * 100}%`,
-                          }}
-                        >
-                          <div className="pdf-comment-tooltip">
-                            {onDeleteComment && (
-                              <button
-                                type="button"
-                                className="pdf-comment-tooltip-delete"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteComment(a.comment.id);
-                                }}
-                                title="Delete comment"
-                              >
-                                &times;
-                              </button>
-                            )}
-                            <div className="pdf-comment-tooltip-content">{a.comment.content}</div>
+                      {pageAnnotations.map(group => {
+                        const isPinned = pinnedCommentId === group.comment.id;
+                        const groupClasses = ['pdf-comment-group'];
+                        if (isPinned) groupClasses.push('pdf-comment-group--pinned');
+                        const firstRect = group.rects[0];
+                        const togglePin = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          setPinnedCommentId(prev => prev === group.comment.id ? null : group.comment.id);
+                        };
+                        return (
+                          <div key={group.comment.id} className={groupClasses.join(' ')}>
+                            {group.rects.map((r, i) => {
+                              const lineH = r.h * pageH;
+                              const isFirstRect = group.hasFirst && i === 0;
+                              const isLastRect = group.hasLast && i === group.rects.length - 1;
+                              const markClasses = ['pdf-comment-mark'];
+                              if (isFirstRect) markClasses.push('pdf-comment-mark--first');
+                              if (isLastRect) markClasses.push('pdf-comment-mark--last');
+                              return (
+                                <div
+                                  key={i}
+                                  className={markClasses.join(' ')}
+                                  onClick={togglePin}
+                                  style={{
+                                    left: `${r.x * 100}%`,
+                                    top: `${r.y * 100}%`,
+                                    width: `${r.w * 100}%`,
+                                    height: `${r.h * 100}%`,
+                                    fontSize: `${lineH}px`,
+                                  }}
+                                >
+                                  <div className="pdf-comment-mark-bg" />
+                                </div>
+                              );
+                            })}
+                            <div
+                              className="pdf-comment-tooltip"
+                              style={{
+                                left: `${firstRect.x * 100}%`,
+                                bottom: `calc(${(1 - firstRect.y) * 100}% + 6px)`,
+                              }}
+                            >
+                              {onDeleteComment && (
+                                <button
+                                  type="button"
+                                  className="pdf-comment-tooltip-delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (pinnedCommentId === group.comment.id) setPinnedCommentId(null);
+                                    onDeleteComment(group.comment.id);
+                                  }}
+                                  title="Delete comment"
+                                >
+                                  &times;
+                                </button>
+                              )}
+                              <div className="pdf-comment-tooltip-content">{group.comment.content}</div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

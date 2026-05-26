@@ -75,7 +75,6 @@ export default function FloatingCommentBox({ paperId, selection, position, onClo
         <span>Comment on page {selection.pageNumber}</span>
         <button className="btn-icon" onClick={onClose} title="Close (Esc)">&times;</button>
       </div>
-      <blockquote className="floating-comment-quote">{selection.text}</blockquote>
       <textarea
         ref={textareaRef}
         className="floating-comment-textarea"
@@ -88,7 +87,6 @@ export default function FloatingCommentBox({ paperId, selection, position, onClo
         }}
       />
       <div className="floating-comment-actions">
-        <span className="floating-comment-hint">⌘/Ctrl + Enter to submit</span>
         <div className="floating-comment-buttons">
           <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
           <button
