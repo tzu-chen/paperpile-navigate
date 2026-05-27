@@ -14,7 +14,8 @@ import {
   getSetting,
   getPaperByArxivId,
 } from '../services/database';
-import { getLocalPdfPathForArxivId, resolveDbPdfPath } from '../services/pdf';
+import { getLocalPdfPathForArxivId, resolveDbPdfPath, getProxyCachePath } from '../services/pdf';
+import { fetchArxivPdf } from '../services/arxiv';
 
 const router = Router();
 
@@ -53,8 +54,16 @@ async function fetchPdfBase64(arxivId: string): Promise<string> {
     return base64;
   }
 
-  const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
-  const response = await fetch(pdfUrl);
+  // Fall back to the pdf-proxy cache (populated when the viewer opens the PDF).
+  const cachedPath = getProxyCachePath(arxivId);
+  if (fs.existsSync(cachedPath)) {
+    const buffer = fs.readFileSync(cachedPath);
+    const base64 = buffer.toString('base64');
+    pdfCache.set(arxivId, { data: base64, fetchedAt: Date.now() });
+    return base64;
+  }
+
+  const response = await fetchArxivPdf(arxivId);
   if (!response.ok) {
     throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
   }

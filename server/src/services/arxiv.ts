@@ -5,6 +5,7 @@ const ARXIV_API_BASE = 'http://export.arxiv.org/api/query';
 
 const MIN_API_INTERVAL_MS = 3000; // arXiv asks for ≥3s between API calls
 const MIN_HTML_INTERVAL_MS = 1000; // HTML/RSS endpoints share a separate gate
+const MIN_PDF_INTERVAL_MS = 1000; // arxiv.org/pdf is CDN-served; pace to stay under bot thresholds
 
 const USER_AGENT =
   'navigate/0.1 (https://github.com/tzu-chen/navigate; mailto:tzu.chen.jimmy.huang@gmail.com)';
@@ -26,13 +27,14 @@ function makeGate(minIntervalMs: number) {
 
 const apiGate = makeGate(MIN_API_INTERVAL_MS);
 const htmlGate = makeGate(MIN_HTML_INTERVAL_MS);
+const pdfGate = makeGate(MIN_PDF_INTERVAL_MS);
 
 export async function arxivFetch(
   url: string,
-  opts: { gate: 'api' | 'html'; init?: RequestInit; maxRetries?: number } = { gate: 'api' }
+  opts: { gate: 'api' | 'html' | 'pdf'; init?: RequestInit; maxRetries?: number } = { gate: 'api' }
 ): Promise<Response> {
   const { gate, init, maxRetries = 3 } = opts;
-  const runner = gate === 'api' ? apiGate : htmlGate;
+  const runner = gate === 'api' ? apiGate : gate === 'pdf' ? pdfGate : htmlGate;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await runner(() =>
@@ -57,6 +59,13 @@ export async function arxivFetch(
     await new Promise(r => setTimeout(r, backoff));
   }
   throw new Error('arxivFetch: exhausted retries');
+}
+
+/** Gated PDF fetch with proper User-Agent and 429/503 backoff. Always use this
+ *  instead of a raw fetch() when pulling from arxiv.org/pdf/. */
+export async function fetchArxivPdf(arxivId: string): Promise<Response> {
+  const url = `https://arxiv.org/pdf/${arxivId}`;
+  return arxivFetch(url, { gate: 'pdf' });
 }
 
 interface ArxivEntry {

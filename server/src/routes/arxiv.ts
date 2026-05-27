@@ -1,10 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { searchArxiv, getArxivPaper, fetchLatestArxiv, fetchRecentArxiv } from '../services/arxiv';
+import { searchArxiv, getArxivPaper, fetchLatestArxiv, fetchRecentArxiv, fetchArxivPdf } from '../services/arxiv';
 import { ARXIV_CATEGORY_GROUPS, ArxivPaper } from '../types';
-import { getLocalPdfPathForArxivId, initializePdfStorage } from '../services/pdf';
+import {
+  getLocalPdfPathForArxivId,
+  initializePdfStorage,
+  getProxyCachePath,
+  evictProxyCache,
+} from '../services/pdf';
 import { getSetting } from '../services/database';
 import fs from 'fs';
-import path from 'path';
 
 const MAX_FAVORITE_CATEGORIES = 5;
 const FAVORITES_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -23,34 +27,6 @@ interface FavoritesCacheEntry {
 let favoritesCache: FavoritesCacheEntry | null = null;
 
 const router = Router();
-
-const PROXY_CACHE_DIR = path.join(__dirname, '..', '..', 'data', 'pdf-cache');
-const MAX_CACHE_FILES = 50;
-
-if (!fs.existsSync(PROXY_CACHE_DIR)) fs.mkdirSync(PROXY_CACHE_DIR, { recursive: true });
-
-/** Remove least-recently-accessed files when cache exceeds MAX_CACHE_FILES. */
-function evictProxyCache() {
-  try {
-    const entries = fs.readdirSync(PROXY_CACHE_DIR)
-      .filter(f => f.endsWith('.pdf'))
-      .map(f => {
-        const filePath = path.join(PROXY_CACHE_DIR, f);
-        return { filePath, atime: fs.statSync(filePath).atimeMs };
-      });
-
-    if (entries.length <= MAX_CACHE_FILES) return;
-
-    // Sort oldest-accessed first, remove excess
-    entries.sort((a, b) => a.atime - b.atime);
-    const toRemove = entries.slice(0, entries.length - MAX_CACHE_FILES);
-    for (const entry of toRemove) {
-      fs.unlinkSync(entry.filePath);
-    }
-  } catch (err) {
-    console.warn('Proxy cache eviction error:', err);
-  }
-}
 
 // GET /api/arxiv/categories - List available category groups
 router.get('/categories', (_req: Request, res: Response) => {
@@ -215,7 +191,7 @@ router.get('/pdf-proxy/:id(*)', async (req: Request, res: Response) => {
 
     // Check for a cached optimized copy in the proxy cache
     initializePdfStorage();
-    const cachedPath = path.join(PROXY_CACHE_DIR, arxivId.replace(/\//g, '_') + '.pdf');
+    const cachedPath = getProxyCachePath(arxivId);
 
     if (fs.existsSync(cachedPath)) {
       // Touch atime so LRU eviction keeps recently viewed files
@@ -226,8 +202,7 @@ router.get('/pdf-proxy/:id(*)', async (req: Request, res: Response) => {
       return res.sendFile(cachedPath);
     }
 
-    const pdfUrl = `https://arxiv.org/pdf/${arxivId}`;
-    const response = await fetch(pdfUrl);
+    const response = await fetchArxivPdf(arxivId);
     if (!response.ok) {
       return res.status(response.status).json({ error: 'Failed to fetch PDF' });
     }
