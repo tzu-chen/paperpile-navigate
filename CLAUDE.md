@@ -15,7 +15,9 @@ npm run build:server      # Build backend only (tsc)
 npm start                 # Start production server (serves API + built frontend from client/dist/)
 ```
 
-The Vite dev server proxies `/api` requests to `http://localhost:3001`. No `.env` files are used — the only server environment variable is `PORT` (defaults to 3001). The Claude API key is stored client-side in localStorage.
+The Vite dev server proxies `/api` requests to `http://localhost:3001`. No `.env` files are used. Server environment variables: `PORT` (defaults to 3001) and `SUITE_DATA_ROOT` (optional, part of the suite data-centralization scheme). The Claude API key is stored client-side in localStorage.
+
+**`SUITE_DATA_ROOT` (data location).** The data directory is resolved in one place — `server/src/services/paths.ts` (imported by `database.ts` and `pdf.ts`). When `SUITE_DATA_ROOT` is set, data lives at `$SUITE_DATA_ROOT/navigate/` (`papers.db`, `pdfs/`, `pdf-cache/`); when unset, it falls back **byte-for-byte** to the legacy in-repo `server/data/`. Do not duplicate or "fix" this path — add new data under `DATA_DIR` from `paths.ts`.
 
 ## Architecture Overview
 

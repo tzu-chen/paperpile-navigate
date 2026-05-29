@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fetchArxivPdf } from './arxiv';
+import { DATA_DIR } from './paths';
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const PDF_DIR = path.join(DATA_DIR, 'pdfs');
 export const PROXY_CACHE_DIR = path.join(DATA_DIR, 'pdf-cache');
 export const MAX_PROXY_CACHE_FILES = 50;
